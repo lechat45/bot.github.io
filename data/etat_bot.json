@@ -1,8 +1,8 @@
 {
   "meta": {
     "mode": "\ud83e\uddea TEST",
-    "cycle": 1777806671,
-    "derniere_maj": "03/05 13:11:11"
+    "cycle": 1777809529,
+    "derniere_maj": "03/05 13:58:49"
   },
   "portefeuille": {
     "valeur_totale": 100000.0,
@@ -12,33 +12,37 @@
   },
   "analyses": [
     {
-      "heure": "13:11:11",
+      "heure": "13:58:48",
       "message": "Erreur API Groq sur AAPL: 'choices'"
     },
     {
-      "heure": "13:11:11",
+      "heure": "13:58:48",
       "message": "\ud83e\udd16 AAPL: 5/10 - Analyse technique neutre (IA indisponible)"
     },
     {
-      "heure": "13:11:11",
+      "heure": "13:58:48",
       "message": "Erreur API Groq sur GOOGL: 'choices'"
     },
     {
-      "heure": "13:11:11",
+      "heure": "13:58:48",
       "message": "\ud83e\udd16 GOOGL: 5/10 - Analyse technique neutre (IA indisponible)"
     },
     {
-      "heure": "13:11:11",
+      "heure": "13:58:49",
       "message": "Erreur API Groq sur TSLA: 'choices'"
     },
     {
-      "heure": "13:11:11",
+      "heure": "13:58:49",
       "message": "\ud83e\udd16 TSLA: 5/10 - Analyse technique neutre (IA indisponible)"
     }
   ],
   "historique": [
     {
       "date": "13:11",
+      "valeur": 100000.0
+    },
+    {
+      "date": "13:58",
       "valeur": 100000.0
     }
   ]
