@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sacha Investor — IA Dashboard</title>
+    <style>
+        :root { 
+            --bg: #0a0a0b; 
+            --surface: #161618; 
+            --accent: #3b82f6; 
+            --text: #e4e4e7; 
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border: #27272a;
+        }
+        body { 
+            background: var(--bg); color: var(--text); 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            margin: 0; padding: 25px; 
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        
+        /* Header & Mode Badge */
+        header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .mode-container { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .mode-badge { 
+            font-size: 0.75em; font-weight: bold; padding: 4px 10px; border-radius: 4px; text-transform: uppercase;
+            letter-spacing: 0.5px; border: 1px solid transparent;
+        }
+        .mode-test { background: rgba(245, 158, 11, 0.1); color: var(--warning); border-color: var(--warning); }
+        .mode-live { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: var(--success); }
+
+        /* Grille principale */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: var(--surface); padding: 20px; border-radius: 12px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+        h3 { margin: 0 0 15px 0; color: #a1a1aa; font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* IA Score UI */
+        .score-circle { font-size: 3em; font-weight: 800; color: var(--accent); text-align: center; }
+        .progress-bar { width: 100%; height: 8px; background: #27272a; border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        #ia-progress { height: 100%; width: 0%; background: var(--accent); transition: width 1s ease; }
+        
+        /* Stats */
+        .big-number { font-size: 2.5em; font-weight: 700; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: #71717a; font-size: 0.75em; padding: 10px; border-bottom: 2px solid var(--border); }
+        td { padding: 12px 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
+
+        /* Logs */
+        #journal { height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; }
+        .log-entry { font-family: monospace; font-size: 0.85em; padding: 10px; background: #1c1c1f; border-radius: 6px; border-left: 3px solid var(--accent); }
+        #journal::-webkit-scrollbar { width: 4px; }
+        #journal::-webkit-scrollbar-thumb { background: var(--border); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1 style="margin:0">Sacha Investor Bot <span style="color:var(--accent)">v2.1</span></h1>
+            <div class="mode-container">
+                <span id="badge-ui" class="mode-badge">INITIALISATION...</span>
+                <span class="meta-info" id="bot-cycle" style="font-family: monospace; color:#71717a; font-size: 0.8em;">CYCLE: --</span>
+            </div>
+        </div>
+        <div id="update-time" class="meta-info">MAJ: --:--:--</div>
+    </header>
+
+    <div class="grid">
+        <!-- Portefeuille -->
+        <div class="card">
+            <h3>Solde Compte (Simulé)</h3>
+            <div id="valeur" class="big-number">-- $</div>
+            <div id="pnl" style="font-weight: bold; font-size: 1.1em;">--</div>
+            <div id="cash-info" class="meta-info" style="margin-top:10px;">CASH: -- $</div>
+        </div>
+
+        <!-- IA Sentiment -->
+        <div class="card" id="ia-card">
+            <h3>Analyse Sentiment Groq ($AAPL)</h3>
+            <div class="score-circle" id="ia-score">--</div>
+            <div class="progress-bar"><div id="ia-progress"></div></div>
+            <div id="ia-verdict" style="text-align:center; margin-top:10px; font-weight:bold; font-size:0.9em; text-transform: uppercase;">SCAN EN COURS...</div>
+        </div>
+    </div>
+
+    <div class="grid" style="margin-top: 25px; grid-template-columns: 1.5fr 1fr;">
+        <!-- Positions -->
+        <div class="card">
+            <h3>Portefeuille d'Actions</h3>
+            <table>
+                <thead>
+                    <tr><th>ACTIF</th><th>QTÉ</th><th>PRIX ACHAT</th><th>P&L %</th></tr>
+                </thead>
+                <tbody id="table-body">
+                    <tr><td colspan="4" style="text-align:center; color:#71717a; padding: 40px;">En attente de données...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Journal -->
+        <div class="card">
+            <h3>Flux d'exécution</h3>
+            <div id="journal"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function refresh() {
+        try {
+            const res = await fetch('./data/etat_bot.json?t=' + Date.now());
+            if (!res.ok) return;
+            const data = await res.json();
+
+            // 1. Gestion du Mode (Test vs Live)
+            const badge = document.getElementById('badge-ui');
+            const isTest = data.meta.mode === "MODE_ENTRAINEMENT_IA";
+            
+            badge.innerText = isTest ? "🧪 Mode Test / Entraînement" : "⚡ Alpaca Paper Live";
+            badge.className = `mode-badge ${isTest ? 'mode-test' : 'mode-live'}`;
+            document.getElementById('bot-cycle').innerText = `ID: ${data.meta.cycle}`;
+            document.getElementById('update-time').innerText = `MAJ: ${new Date().toLocaleTimeString()}`;
+
+            // 2. Chiffres Portefeuille
+            const pf = data.portefeuille;
+            document.getElementById('valeur').innerText = pf.valeur_totale.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' $';
+            document.getElementById('cash-info').innerText = `CASH DISPONIBLE: ${pf.capital_disponible.toLocaleString(undefined, {minimumFractionDigits: 2})} $`;
+            
+            const pnl = pf.pnl_total || 0;
+            const pnlEl = document.getElementById('pnl');
+            pnlEl.innerText = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' $ (Total)';
+            pnlEl.style.color = pnl >= 0 ? 'var(--success)' : 'var(--error)';
+
+            // 3. IA Score & Verdict
+            const logIA = data.analyses.find(l => l.message.includes("Score IA"));
+            if (logIA) {
+                const score = parseInt(logIA.message.match(/\d+/)[0]);
+                document.getElementById('ia-score').innerText = score + '/10';
+                document.getElementById('ia-progress').style.width = (score * 10) + '%';
+                
+                const verdEl = document.getElementById('ia-verdict');
+                if (score >= 7) {
+                    verdEl.innerText = "Signal d'achat détecté ✅";
+                    verdEl.style.color = "var(--success)";
+                } else {
+                    verdEl.innerText = "Signal trop faible - Attente ❌";
+                    verdEl.style.color = "var(--warning)";
+                }
+            }
+
+            // 4. Positions
+            const tbody = document.getElementById('table-body');
+            if (pf.positions.length > 0) {
+                tbody.innerHTML = pf.positions.map(p => `
+                    <tr>
+                        <td style="font-weight:bold; color:var(--accent)">${p.ticker}</td>
+                        <td>${p.quantite.toFixed(4)}</td>
+                        <td>${p.prix_achat.toFixed(2)}$</td>
+                        <td style="color:${p.pnl_pct >= 0 ? 'var(--success)' : 'var(--error)'}; font-weight:bold">
+                            ${p.pnl_pct >= 0 ? '+' : ''}${p.pnl_pct.toFixed(2)}%
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#71717a; padding: 20px;">Aucune action détenue</td></tr>';
+            }
+
+            // 5. Journal
+            document.getElementById('journal').innerHTML = data.analyses.map(l => `
+                <div class="log-entry">
+                    <span class="log-time">${l.heure}</span> ${l.message}
+                </div>
+            `).reverse().join('');
+
+        } catch (e) { console.error("Erreur de mise à jour"); }
+    }
+
+    setInterval(refresh, 10000);
+    refresh();
+</script>
+
+</body>
+</html>
