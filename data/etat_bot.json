@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "cycle": 1,
+    "timestamp": "2026-05-03T09:43:54.393390Z",
+    "mode": "PAPER_TRADING_ALPACA"
+  },
+  "portefeuille": {
+    "capital_initial": 0.0,
+    "capital_disponible": 100000.0,
+    "valeur_totale": 100000.0,
+    "positions": {}
+  }
+}
