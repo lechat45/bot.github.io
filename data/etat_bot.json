@@ -1,49 +1,493 @@
 {
   "meta": {
-    "mode": "\ud83e\uddea TEST",
-    "cycle": 1777809529,
-    "derniere_maj": "03/05 13:58:49"
+    "cycle": 8,
+    "timestamp": "2026-05-03T16:09:44.811736+00:00",
+    "bot_version": "2.0.0-route",
+    "broker": "Alpaca Paper Trading",
+    "mode": "PAPER",
+    "pause_drawdown": false
   },
   "portefeuille": {
-    "valeur_totale": 100000.0,
-    "capital_disponible": 100000.0,
-    "pnl_total": 0.0,
-    "positions": []
+    "capital_initial": 5000.0,
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "buying_power": 199800.0,
+    "pnl_total": 95000.0,
+    "pnl_total_pct": 1900.0,
+    "positions": {},
+    "nb_positions": 0,
+    "historique_trades": [],
+    "historique_valeur": [
+      {
+        "timestamp": "2026-05-03T16:06:10.225645+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:06:41.081834+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:07:11.556895+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:07:43.449953+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:08:13.774861+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:08:44.128772+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:09:14.439387+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      },
+      {
+        "timestamp": "2026-05-03T16:09:44.774420+00:00",
+        "equity": 100000.0,
+        "cash": 100000.0
+      }
+    ]
   },
-  "analyses": [
+  "decisions_cycle": [
     {
-      "heure": "13:58:48",
-      "message": "Erreur API Groq sur AAPL: 'choices'"
+      "ticker": "TSLA",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:34.869358+00:00"
     },
     {
-      "heure": "13:58:48",
-      "message": "\ud83e\udd16 AAPL: 5/10 - Analyse technique neutre (IA indisponible)"
+      "ticker": "NVDA",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:35.208756+00:00"
     },
     {
-      "heure": "13:58:48",
-      "message": "Erreur API Groq sur GOOGL: 'choices'"
+      "ticker": "AMD",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:35.547779+00:00"
     },
     {
-      "heure": "13:58:48",
-      "message": "\ud83e\udd16 GOOGL: 5/10 - Analyse technique neutre (IA indisponible)"
+      "ticker": "AMZN",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:35.884830+00:00"
     },
     {
-      "heure": "13:58:49",
-      "message": "Erreur API Groq sur TSLA: 'choices'"
+      "ticker": "NFLX",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:36.227235+00:00"
     },
     {
-      "heure": "13:58:49",
-      "message": "\ud83e\udd16 TSLA: 5/10 - Analyse technique neutre (IA indisponible)"
+      "ticker": "META",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:36.586810+00:00"
+    },
+    {
+      "ticker": "AAPL",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:36.925547+00:00"
+    },
+    {
+      "ticker": "MSFT",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:37.268452+00:00"
+    },
+    {
+      "ticker": "GOOGL",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:37.605441+00:00"
+    },
+    {
+      "ticker": "INTC",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:37.941894+00:00"
+    },
+    {
+      "ticker": "COIN",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:38.277487+00:00"
+    },
+    {
+      "ticker": "SOFI",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:38.616954+00:00"
+    },
+    {
+      "ticker": "PLTR",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:38.956007+00:00"
+    },
+    {
+      "ticker": "RIVN",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:39.294714+00:00"
+    },
+    {
+      "ticker": "LCID",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:39.633280+00:00"
+    },
+    {
+      "ticker": "NIO",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:39.970104+00:00"
+    },
+    {
+      "ticker": "UBER",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:40.308378+00:00"
+    },
+    {
+      "ticker": "LYFT",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:40.645127+00:00"
+    },
+    {
+      "ticker": "SNAP",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:40.988572+00:00"
+    },
+    {
+      "ticker": "RBLX",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:41.329419+00:00"
+    },
+    {
+      "ticker": "HOOD",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:41.665626+00:00"
+    },
+    {
+      "ticker": "DKNG",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:42.006500+00:00"
+    },
+    {
+      "ticker": "PENN",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:42.347000+00:00"
+    },
+    {
+      "ticker": "GME",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:42.685412+00:00"
+    },
+    {
+      "ticker": "AMC",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:43.025117+00:00"
+    },
+    {
+      "ticker": "SPY",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:43.364182+00:00"
+    },
+    {
+      "ticker": "QQQ",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:43.700736+00:00"
+    },
+    {
+      "ticker": "KO",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:44.039225+00:00"
+    },
+    {
+      "ticker": "DAL",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:44.382551+00:00"
+    },
+    {
+      "ticker": "BA",
+      "action_executee": "AUCUNE",
+      "signal_technique": "HOLD",
+      "score_sentiment": 0.55,
+      "resume_sentiment": "",
+      "raison_technique": "",
+      "raison_finale": "Pas assez de barres (marché fermé ?)",
+      "prix": null,
+      "rsi": null,
+      "sma_court": null,
+      "sma_long": null,
+      "timestamp": "2026-05-03T16:09:44.736319+00:00"
     }
   ],
-  "historique": [
-    {
-      "date": "13:11",
-      "valeur": 100000.0
-    },
-    {
-      "date": "13:58",
-      "valeur": 100000.0
-    }
-  ]
+  "config": {
+    "stop_loss_pct": 3.0,
+    "take_profit_pct": 4.5,
+    "max_positions": 5,
+    "allocation_trade": 1000.0,
+    "seuil_sentiment": 0.5,
+    "nb_actifs": 30
+  }
 }
