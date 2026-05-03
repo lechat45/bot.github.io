@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sacha Investor — Pro Dashboard v4</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #06070a;
+  --bg2:     #0d0f14;
+  --bg3:     #12151c;
+  --border:  rgba(255,255,255,0.06);
+  --accent:  #00d4ff;
+  --green:   #00e5a0;
+  --red:     #ff3b6b;
+  --yellow:  #f5c518;
+  --orange:  #fb923c;
+  --purple:  #a78bfa;
+  --text:    #e8eaf2;
+  --muted:   #4a4f65;
+  --mono:    'Space Mono', monospace;
+  --ui:      'Syne', sans-serif;
+}
+html { font-size: 14px; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--ui); min-height: 100vh; overflow-x: hidden;
+}
+body::before {
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,212,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,.012) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+body::after {
+  content:''; position:fixed; top:-200px; left:50%; transform:translateX(-50%);
+  width:700px; height:400px; pointer-events:none; z-index:0;
+  background: radial-gradient(ellipse, rgba(0,212,255,.05) 0%, transparent 70%);
+}
+.wrap { max-width:1300px; margin:0 auto; padding:22px 18px; position:relative; z-index:1; }
+
+/* Header */
+.hdr { display:flex; align-items:center; justify-content:space-between;
+padding-bottom:18px; margin-bottom:24px; border-bottom:1px solid var(–border); }
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-icon { width:36px; height:36px; border-radius:9px;
+background:linear-gradient(135deg,var(–accent),#7c3aed);
+display:flex; align-items:center; justify-content:center; font-size:17px;
+box-shadow:0 0 18px rgba(0,212,255,.2); }
+.logo-txt { font-size:1.3rem; font-weight:800; letter-spacing:-.02em; }
+.logo-txt span { color:var(–accent); }
+.logo-sub { font-size:.7rem; color:var(–muted); font-family:var(–mono);
+letter-spacing:.08em; margin-top:2px; }
+.hdr-r { display:flex; align-items:center; gap:12px; }
+.pill { font-family:var(–mono); font-size:.7rem; padding:4px 11px;
+border-radius:20px; letter-spacing:.05em; font-weight:700; border:1px solid; }
+.pill-live { background:rgba(0,229,160,.08); color:var(–green); border-color:rgba(0,229,160,.3); animation:pg 2s infinite; }
+.pill-test { background:rgba(245,197,24,.08); color:var(–yellow); border-color:rgba(245,197,24,.3); }
+.pill-err  { background:rgba(255,59,107,.08);  color:var(–red);    border-color:rgba(255,59,107,.3); }
+@keyframes pg { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 10px rgba(0,229,160,.4)} }
+.upd { font-family:var(–mono); font-size:.68rem; color:var(–muted); }
+
+/* Cards */
+.card { background:var(–bg2); border:1px solid var(–border); border-radius:14px;
+padding:18px; position:relative; overflow:hidden; transition:border-color .2s; }
+.card:hover { border-color:rgba(0,212,255,.12); }
+.card::before { content:’’; position:absolute; top:0; left:0; right:0; height:1px;
+background:linear-gradient(90deg,transparent,rgba(0,212,255,.25),transparent);
+opacity:0; transition:opacity .3s; }
+.card:hover::before { opacity:1; }
+.card-lbl { font-size:.68rem; font-weight:700; letter-spacing:.1em;
+text-transform:uppercase; color:var(–muted); margin-bottom:9px; }
+
+/* Grilles */
+.g4   { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px; }
+.g3   { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }
+.g21  { display:grid; grid-template-columns:2fr 1fr; gap:12px; margin-bottom:12px; }
+.g12  { display:grid; grid-template-columns:1fr 2fr; gap:12px; margin-bottom:12px; }
+.g2   { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+
+/* Métriques */
+.mv  { font-family:var(–mono); font-size:1.6rem; font-weight:700; line-height:1.1; margin-bottom:3px; }
+.ms  { font-family:var(–mono); font-size:.73rem; font-weight:700; }
+.pos { color:var(–green); } .neg { color:var(–red); } .neu { color:var(–muted); }
+.orn { color:var(–orange); }
+
+/* Stat mini */
+.stat-row { display:flex; justify-content:space-between; align-items:center;
+padding:8px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+.stat-row:last-child { border-bottom:none; }
+.stat-lbl { font-size:.72rem; color:var(–muted); font-family:var(–mono); }
+.stat-val { font-size:.78rem; font-weight:700; font-family:var(–mono); }
+
+/* Tableau positions */
+.pos-tbl { width:100%; border-collapse:collapse; }
+.pos-tbl th { font-family:var(–mono); font-size:.62rem; letter-spacing:.1em;
+text-transform:uppercase; color:var(–muted); padding:8px 8px;
+text-align:left; border-bottom:1px solid var(–border); }
+.pos-tbl td { padding:10px 8px; font-family:var(–mono); font-size:.78rem;
+border-bottom:1px solid rgba(255,255,255,.03); }
+.pos-tbl tr:hover td { background:rgba(255,255,255,.02); }
+.pos-tbl tr:last-child td { border-bottom:none; }
+.chip { display:inline-flex; align-items:center; gap:5px; font-weight:700; font-size:.82rem; }
+.dot  { width:5px; height:5px; border-radius:50%; background:var(–accent); flex-shrink:0; }
+
+/* Jauge */
+.gauge-list { display:flex; flex-direction:column; gap:8px; }
+.gauge-row  { display:flex; align-items:center; gap:8px; }
+.g-tk  { font-family:var(–mono); font-size:.72rem; font-weight:700; width:46px; flex-shrink:0; }
+.g-bg  { flex:1; height:5px; background:var(–bg3); border-radius:3px; overflow:hidden; }
+.g-fill{ height:100%; border-radius:3px; transition:width .7s cubic-bezier(.4,0,.2,1); }
+.g-sc  { font-family:var(–mono); font-size:.68rem; font-weight:700; width:36px; text-align:right; flex-shrink:0; }
+.g-rg  { font-family:var(–mono); font-size:.58rem; width:50px; flex-shrink:0; }
+
+/* Régime badges */
+.regime { font-family:var(–mono); font-size:.6rem; padding:2px 6px;
+border-radius:4px; font-weight:700; letter-spacing:.04em; }
+.r-haussier { background:rgba(0,229,160,.1); color:var(–green); }
+.r-baissier { background:rgba(255,59,107,.1); color:var(–red); }
+.r-range    { background:rgba(167,139,250,.1); color:var(–purple); }
+.r-volatile { background:rgba(251,146,60,.1);  color:var(–orange); }
+.r-inconnu  { background:rgba(74,79,101,.15);  color:var(–muted); }
+
+/* Journal */
+.journal { height:220px; overflow-y:auto; display:flex; flex-direction:column-reverse;
+gap:3px; scrollbar-width:thin; scrollbar-color:var(–border) transparent; }
+.log-e   { display:flex; gap:8px; padding:6px 8px; border-radius:7px;
+background:rgba(255,255,255,.02); animation:fi .25s ease; }
+@keyframes fi { from{opacity:0;transform:translateY(3px)} to{opacity:1} }
+.log-t   { font-family:var(–mono); font-size:.65rem; color:var(–accent); flex-shrink:0; }
+.log-m   { font-family:var(–mono); font-size:.7rem;  color:#9ca3b8; line-height:1.45; }
+
+/* Graphique */
+.chart-wrap { position:relative; height:130px; }
+
+/* Perf cards */
+.pf-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.pf-card { background:var(–bg3); border-radius:10px; padding:12px;
+border:1px solid var(–border); text-align:center; }
+.pf-val  { font-family:var(–mono); font-size:1.2rem; font-weight:700; }
+.pf-lbl  { font-family:var(–mono); font-size:.6rem; color:var(–muted);
+text-transform:uppercase; letter-spacing:.08em; margin-top:4px; }
+
+/* Seuil score */
+.score-badge { display:inline-flex; align-items:center; justify-content:center;
+width:34px; height:34px; border-radius:8px; font-family:var(–mono);
+font-size:.78rem; font-weight:700; flex-shrink:0; }
+
+/* Section title */
+.stitle { font-size:.67rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+color:var(–muted); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.stitle::after { content:’’; flex:1; height:1px; background:var(–border); }
+
+/* Responsive */
+@media(max-width:960px) {
+.g4,.g3 { grid-template-columns:repeat(2,1fr); }
+.g21,.g12,.g2 { grid-template-columns:1fr; }
+.pf-grid { grid-template-columns:repeat(2,1fr); }
+}
+@media(max-width:520px) {
+.g4 { grid-template-columns:1fr 1fr; }
+.mv { font-size:1.3rem; }
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+
+  <header class="hdr">
+    <div class="logo">
+      <div class="logo-icon">📈</div>
+      <div>
+        <div class="logo-txt">Sacha <span>Investor</span></div>
+        <div class="logo-sub" id="strategie">Multi-Signal Pro v4.0</div>
+      </div>
+    </div>
+    <div class="hdr-r">
+      <span class="upd" id="upd">--</span>
+      <span class="pill pill-test" id="badge">INIT…</span>
+    </div>
+  </header>
+
+  <!-- KPIs principaux -->
+
+  <div class="g4">
+    <div class="card">
+      <div class="card-lbl">Portefeuille</div>
+      <div class="mv" id="v-port">--</div>
+      <div class="ms neu" id="v-cash">Cash: --</div>
+    </div>
+    <div class="card">
+      <div class="card-lbl">P&L Journée</div>
+      <div class="mv" id="v-pnl">--</div>
+      <div class="ms neu" id="v-pnl-pct">--</div>
+    </div>
+    <div class="card">
+      <div class="card-lbl">Positions</div>
+      <div class="mv" id="v-pos">--</div>
+      <div class="ms neu">/ 4 max · Kelly sizing</div>
+    </div>
+    <div class="card">
+      <div class="card-lbl">Analyses ce cycle</div>
+      <div class="mv" id="v-ana">--</div>
+      <div class="ms neu" id="v-strat">--</div>
+    </div>
+  </div>
+
+  <!-- Performance stats -->
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="stitle">Performance statistique</div>
+    <div class="pf-grid">
+      <div class="pf-card">
+        <div class="pf-val pos" id="v-wr">--%</div>
+        <div class="pf-lbl">Win Rate</div>
+      </div>
+      <div class="pf-card">
+        <div class="pf-val" id="v-pf" style="color:var(--accent)">--</div>
+        <div class="pf-lbl">Profit Factor</div>
+      </div>
+      <div class="pf-card">
+        <div class="pf-val pos" id="v-gm">--</div>
+        <div class="pf-lbl">Gain moyen</div>
+      </div>
+      <div class="pf-card">
+        <div class="pf-val neg" id="v-pm">--</div>
+        <div class="pf-lbl">Perte moyenne</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graphique + Positions -->
+
+  <div class="g21">
+    <div class="card">
+      <div class="stitle">Évolution portefeuille</div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="stitle">Positions actives</div>
+      <table class="pos-tbl">
+        <thead><tr><th>Ticker</th><th>Score</th><th>Achat</th><th>Actuel</th><th>P&L</th></tr></thead>
+        <tbody id="pos-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Scores par actif + Journal -->
+
+  <div class="g12">
+    <div class="card">
+      <div class="stitle">Journal IA (Groq LLaMA 3)</div>
+      <div class="journal" id="journal"></div>
+    </div>
+    <div class="card">
+      <div class="stitle">Scores multi-signal</div>
+      <div class="gauge-list" id="gauges">
+        <div style="color:var(--muted);font-size:.75rem;font-family:var(--mono);text-align:center;padding:20px">
+          En attente des analyses…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Détail indicateurs -->
+
+  <div class="card">
+    <div class="stitle">Détail indicateurs par actif</div>
+    <div id="ind-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+      <div style="color:var(--muted);font-size:.75rem;font-family:var(--mono);padding:10px">
+        En attente…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let perfChart = null;
+
+const fmt   = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const fmtPct= n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+
+function gcol(score) {
+  if (score >= 75) return 'var(--green)';
+  if (score >= 62) return 'var(--accent)';
+  if (score >= 45) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function regimeBadge(r) {
+  const map = {
+    'TENDANCE_HAUSSIERE': ['r-haussier','↑ HAUSSIER'],
+    'TENDANCE_BAISSIERE': ['r-baissier','↓ BAISSIER'],
+    'RANGE':              ['r-range','↔ RANGE'],
+    'VOLATILE':           ['r-volatile','⚡ VOLATILE'],
+  };
+  const [cls, label] = map[r] || ['r-inconnu', r || '?'];
+  return `<span class="regime ${cls}">${label}</span>`;
+}
+
+function scoreBadge(score) {
+  const col = gcol(score);
+  return `<div class="score-badge" style="background:${col}22;color:${col};border:1px solid ${col}44">${score}</div>`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('./data/etat_bot.json?t=' + Date.now());
+    if (!res.ok) return;
+    const d = await res.json();
+    const meta = d.meta, pf = d.portefeuille, perf = d.performance || {};
+
+    // Meta
+    document.getElementById('upd').textContent = 'MAJ ' + meta.derniere_maj;
+    document.getElementById('strategie').textContent = meta.strategie || '';
+    const badge = document.getElementById('badge');
+    badge.textContent = meta.mode;
+    badge.className = 'pill ' + (meta.mode.includes('LIVE') ? 'pill-live' : meta.mode.includes('ERREUR') ? 'pill-err' : 'pill-test');
+
+    // KPIs
+    document.getElementById('v-port').textContent = fmt(pf.valeur_totale) + ' $';
+    document.getElementById('v-cash').textContent = 'Cash: ' + fmt(pf.capital_disponible) + ' $';
+    document.getElementById('v-ana').textContent  = meta.nb_analyses || '--';
+    document.getElementById('v-strat').textContent = 'actifs analysés';
+
+    const pnlEl  = document.getElementById('v-pnl');
+    const pnlPct = document.getElementById('v-pnl-pct');
+    const pp = pf.pnl_total >= 0;
+    pnlEl.textContent  = (pp ? '+' : '') + fmt(pf.pnl_total) + ' $';
+    pnlEl.style.color  = pp ? 'var(--green)' : 'var(--red)';
+    pnlPct.textContent = fmtPct(pf.pnl_pct || 0);
+    pnlPct.className   = 'ms ' + (pp ? 'pos' : 'neg');
+
+    document.getElementById('v-pos').textContent = pf.positions.length;
+
+    // Performance stats
+    const wr = perf.win_rate || 0;
+    const pfv = perf.profit_factor || 0;
+    document.getElementById('v-wr').textContent = wr.toFixed(1) + '%';
+    document.getElementById('v-wr').style.color = wr >= 55 ? 'var(--green)' : wr >= 40 ? 'var(--yellow)' : 'var(--red)';
+    document.getElementById('v-pf').textContent = pfv.toFixed(2);
+    document.getElementById('v-pf').style.color = pfv >= 1.5 ? 'var(--green)' : pfv >= 1 ? 'var(--accent)' : 'var(--red)';
+    document.getElementById('v-gm').textContent = '+' + (perf.gain_moyen || 0).toFixed(2) + '%';
+    document.getElementById('v-pm').textContent = '-' + (perf.perte_moyenne || 0).toFixed(2) + '%';
+
+    // Tableau positions
+    const tbody = document.getElementById('pos-body');
+    if (!pf.positions.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted);font-size:.78rem;font-family:var(--mono)">Aucune position ouverte</td></tr>`;
+    } else {
+      tbody.innerHTML = pf.positions.map(p => {
+        const pos = p.pnl_pct >= 0;
+        return `<tr>
+          <td><span class="chip"><span class="dot"></span>${p.ticker}</span></td>
+          <td>${scoreBadge(p.score || 0)}</td>
+          <td>${fmt(p.prix_achat)} $</td>
+          <td>${fmt(p.prix_actuel)} $</td>
+          <td style="color:${pos?'var(--green)':'var(--red)'};font-weight:700">
+            ${pos?'+':''}${p.pnl_pct.toFixed(2)}%
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Journal
+    document.getElementById('journal').innerHTML = (d.analyses || []).map(l =>
+      `<div class="log-e"><span class="log-t">${l.heure}</span><span class="log-m">${l.message}</span></div>`
+    ).join('');
+
+    // Gauges + Détail indicateurs
+    const scores = d.scores || {};
+    const entries = Object.entries(scores).sort((a,b) => b[1].score - a[1].score);
+
+    // Gauges
+    document.getElementById('gauges').innerHTML = entries.length ? entries.map(([tk, sc]) => {
+      const col = gcol(sc.score);
+      return `<div class="gauge-row">
+        <span class="g-tk">${tk}</span>
+        <div class="g-bg"><div class="g-fill" style="width:${sc.score}%;background:${col}"></div></div>
+        <span class="g-sc" style="color:${col}">${sc.score}</span>
+        <span class="g-rg">${regimeBadge(sc.regime)}</span>
+      </div>`;
+    }).join('') : `<div style="color:var(--muted);font-size:.75rem;font-family:var(--mono);padding:10px">En attente…</div>`;
+
+    // Cartes indicateurs détaillés
+    document.getElementById('ind-grid').innerHTML = entries.length ? entries.map(([tk, sc]) => {
+      const rsi = sc.rsi ? sc.rsi.toFixed(1) : '--';
+      const rsiCol = sc.rsi > 70 ? 'var(--red)' : sc.rsi < 30 ? 'var(--green)' : 'var(--text)';
+      return `<div style="background:var(--bg3);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-weight:700;font-size:.9rem">${tk}</span>
+          ${regimeBadge(sc.regime)}
+        </div>
+        <div class="stat-row"><span class="stat-lbl">Score total</span>
+          <span class="stat-val" style="color:${gcol(sc.score)}">${sc.score}/100</span></div>
+        <div class="stat-row"><span class="stat-lbl">Technique</span>
+          <span class="stat-val">${sc.score_tech}/85</span></div>
+        <div class="stat-row"><span class="stat-lbl">IA Groq</span>
+          <span class="stat-val" style="color:var(--purple)">${sc.score_ia}/15</span></div>
+        <div class="stat-row"><span class="stat-lbl">RSI (14)</span>
+          <span class="stat-val" style="color:${rsiCol}">${rsi}</span></div>
+        <div class="stat-row"><span class="stat-lbl">EMA9</span>
+          <span class="stat-val">${sc.ema9 ? fmt(sc.ema9)+'$' : '--'}</span></div>
+        <div class="stat-row"><span class="stat-lbl">EMA21</span>
+          <span class="stat-val">${sc.ema21 ? fmt(sc.ema21)+'$' : '--'}</span></div>
+        <div class="stat-row"><span class="stat-lbl">ATR</span>
+          <span class="stat-val">${sc.atr ? sc.atr.toFixed(2) : '--'}</span></div>
+        <div class="stat-row"><span class="stat-lbl">Vol. spike</span>
+          <span class="stat-val" style="color:${sc.volume_spike?'var(--orange)':'var(--muted)'}">
+            ${sc.volume_spike ? '⚡ OUI' : 'non'}
+          </span></div>
+        ${sc.setup ? `<div style="margin-top:8px;font-size:.65rem;font-family:var(--mono);color:var(--muted);line-height:1.4">💡 ${sc.setup}</div>` : ''}
+        ${sc.risque ? `<div style="margin-top:3px;font-size:.63rem;font-family:var(--mono);color:rgba(255,59,107,.7)">⚠️ ${sc.risque}</div>` : ''}
+      </div>`;
+    }).join('') : `<div style="color:var(--muted);font-size:.75rem;font-family:var(--mono);padding:10px">En attente des analyses…</div>`;
+
+    // Graphique
+    const labels = d.historique.map(h => h.date);
+    const values = d.historique.map(h => h.valeur);
+    const ctx = document.getElementById('chart').getContext('2d');
+    if (perfChart) {
+      perfChart.data.labels = labels;
+      perfChart.data.datasets[0].data = values;
+      perfChart.update('none');
+    } else {
+      const gr = ctx.createLinearGradient(0, 0, 0, 130);
+      gr.addColorStop(0, 'rgba(0,212,255,.15)');
+      gr.addColorStop(1, 'rgba(0,212,255,0)');
+      perfChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{
+          data: values, borderColor: '#00d4ff', borderWidth: 1.5,
+          pointRadius: 0, fill: true, backgroundColor: gr, tension: 0.4
+        }]},
+        options: {
+          animation: false,
+          plugins: { legend: {display:false}, tooltip: {
+            backgroundColor:'#0d0f14', borderColor:'rgba(0,212,255,.3)', borderWidth:1,
+            titleFont:{family:"'Space Mono',monospace",size:10},
+            bodyFont:{family:"'Space Mono',monospace",size:10},
+            callbacks: { label: c => ' ' + fmt(c.parsed.y) + ' $' }
+          }},
+          scales: {
+            x: { display: false },
+            y: { display:true, grid:{color:'rgba(255,255,255,.03)',drawBorder:false},
+                 ticks:{color:'#4a4f65',font:{family:"'Space Mono',monospace",size:9},
+                        maxTicksLimit:4, callback: v => fmt(v)+'$'} }
+          },
+          responsive:true, maintainAspectRatio:false
+        }
+      });
+    }
+
+  } catch(e) { console.log('MAJ en attente…', e.message); }
+}
+
+setInterval(refresh, 30000);
+refresh();
+</script>
+
+</body>
+</html>
