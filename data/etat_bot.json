@@ -1,7 +1,7 @@
 {
   "meta": {
-    "cycle": 8,
-    "timestamp": "2026-05-03T22:41:10.040274+00:00",
+    "cycle": 7,
+    "timestamp": "2026-05-03T23:30:55.426748+00:00",
     "bot_version": "2.0.0-route",
     "broker": "Alpaca Paper Trading",
     "mode": "PAPER",
@@ -19,42 +19,37 @@
     "historique_trades": [],
     "historique_valeur": [
       {
-        "timestamp": "2026-05-03T22:37:26.075785+00:00",
+        "timestamp": "2026-05-03T23:27:15.211607+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:37:58.073980+00:00",
+        "timestamp": "2026-05-03T23:27:51.856776+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:38:30.125322+00:00",
+        "timestamp": "2026-05-03T23:28:28.446621+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:39:02.424123+00:00",
+        "timestamp": "2026-05-03T23:29:05.057058+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:39:34.289691+00:00",
+        "timestamp": "2026-05-03T23:29:41.713315+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:40:06.178908+00:00",
+        "timestamp": "2026-05-03T23:30:18.357953+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       },
       {
-        "timestamp": "2026-05-03T22:40:38.101690+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
-      },
-      {
-        "timestamp": "2026-05-03T22:41:09.961898+00:00",
+        "timestamp": "2026-05-03T23:30:55.189391+00:00",
         "equity": 100000.0,
         "cash": 100000.0
       }
@@ -73,7 +68,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:40:58.645751+00:00"
+      "timestamp": "2026-05-03T23:30:39.365388+00:00"
     },
     {
       "ticker": "NVDA",
@@ -87,7 +82,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:40:59.045393+00:00"
+      "timestamp": "2026-05-03T23:30:39.902614+00:00"
     },
     {
       "ticker": "AMD",
@@ -101,7 +96,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:40:59.443015+00:00"
+      "timestamp": "2026-05-03T23:30:40.440426+00:00"
     },
     {
       "ticker": "AMZN",
@@ -115,7 +110,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:40:59.823662+00:00"
+      "timestamp": "2026-05-03T23:30:40.961629+00:00"
     },
     {
       "ticker": "NFLX",
@@ -129,7 +124,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:00.218451+00:00"
+      "timestamp": "2026-05-03T23:30:41.496271+00:00"
     },
     {
       "ticker": "META",
@@ -143,7 +138,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:00.600078+00:00"
+      "timestamp": "2026-05-03T23:30:42.031289+00:00"
     },
     {
       "ticker": "AAPL",
@@ -157,7 +152,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:00.993605+00:00"
+      "timestamp": "2026-05-03T23:30:42.566072+00:00"
     },
     {
       "ticker": "MSFT",
@@ -171,7 +166,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:01.376601+00:00"
+      "timestamp": "2026-05-03T23:30:43.093510+00:00"
     },
     {
       "ticker": "GOOGL",
@@ -185,7 +180,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:01.755776+00:00"
+      "timestamp": "2026-05-03T23:30:43.627773+00:00"
     },
     {
       "ticker": "INTC",
@@ -199,7 +194,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:02.137462+00:00"
+      "timestamp": "2026-05-03T23:30:44.144840+00:00"
     },
     {
       "ticker": "COIN",
@@ -213,7 +208,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:02.537606+00:00"
+      "timestamp": "2026-05-03T23:30:44.659123+00:00"
     },
     {
       "ticker": "SOFI",
@@ -227,7 +222,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:02.916015+00:00"
+      "timestamp": "2026-05-03T23:30:45.169380+00:00"
     },
     {
       "ticker": "PLTR",
@@ -241,7 +236,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:03.302771+00:00"
+      "timestamp": "2026-05-03T23:30:45.706459+00:00"
     },
     {
       "ticker": "RIVN",
@@ -255,7 +250,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:03.681846+00:00"
+      "timestamp": "2026-05-03T23:30:46.221013+00:00"
     },
     {
       "ticker": "LCID",
@@ -269,7 +264,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:04.074075+00:00"
+      "timestamp": "2026-05-03T23:30:46.802336+00:00"
     },
     {
       "ticker": "NIO",
@@ -283,7 +278,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:04.474652+00:00"
+      "timestamp": "2026-05-03T23:30:47.339332+00:00"
     },
     {
       "ticker": "UBER",
@@ -297,7 +292,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:04.866423+00:00"
+      "timestamp": "2026-05-03T23:30:47.859054+00:00"
     },
     {
       "ticker": "LYFT",
@@ -311,7 +306,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:05.267056+00:00"
+      "timestamp": "2026-05-03T23:30:48.392584+00:00"
     },
     {
       "ticker": "SNAP",
@@ -325,7 +320,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:05.658649+00:00"
+      "timestamp": "2026-05-03T23:30:48.902472+00:00"
     },
     {
       "ticker": "RBLX",
@@ -339,7 +334,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:06.039349+00:00"
+      "timestamp": "2026-05-03T23:30:49.432279+00:00"
     },
     {
       "ticker": "HOOD",
@@ -353,7 +348,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:06.433511+00:00"
+      "timestamp": "2026-05-03T23:30:49.976521+00:00"
     },
     {
       "ticker": "DKNG",
@@ -367,7 +362,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:06.814799+00:00"
+      "timestamp": "2026-05-03T23:30:50.495598+00:00"
     },
     {
       "ticker": "PENN",
@@ -381,7 +376,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:07.204866+00:00"
+      "timestamp": "2026-05-03T23:30:51.298986+00:00"
     },
     {
       "ticker": "GME",
@@ -395,7 +390,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:07.587717+00:00"
+      "timestamp": "2026-05-03T23:30:51.819919+00:00"
     },
     {
       "ticker": "AMC",
@@ -409,7 +404,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:07.967186+00:00"
+      "timestamp": "2026-05-03T23:30:52.337374+00:00"
     },
     {
       "ticker": "SPY",
@@ -423,7 +418,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:08.349603+00:00"
+      "timestamp": "2026-05-03T23:30:52.846519+00:00"
     },
     {
       "ticker": "QQQ",
@@ -437,7 +432,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:08.742585+00:00"
+      "timestamp": "2026-05-03T23:30:53.382581+00:00"
     },
     {
       "ticker": "KO",
@@ -451,7 +446,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:09.120082+00:00"
+      "timestamp": "2026-05-03T23:30:53.918188+00:00"
     },
     {
       "ticker": "DAL",
@@ -465,7 +460,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:09.497961+00:00"
+      "timestamp": "2026-05-03T23:30:54.438577+00:00"
     },
     {
       "ticker": "BA",
@@ -479,7 +474,7 @@
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-03T22:41:09.882419+00:00"
+      "timestamp": "2026-05-03T23:30:54.973491+00:00"
     }
   ],
   "config": {
