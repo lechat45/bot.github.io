@@ -2,9 +2,10 @@ name: "🚀 Alpaca Bot Execution"
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # S'exécute toutes les 10 minutes
-  workflow_dispatch: # Permet de le lancer à la main
-
+    # C'est le maximum autorisé par GitHub (toutes les 5 minutes)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  
 jobs:
   trade:
     runs-on: ubuntu-latest
