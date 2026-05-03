@@ -1,13 +1,22 @@
 {
   "meta": {
-    "cycle": 1,
-    "timestamp": "2026-05-03T09:50:10.238695Z",
-    "mode": "PAPER_TRADING_ALPACA"
+    "mode": "MODE_ENTRAINEMENT_IA",
+    "cycle": 1777803409
   },
   "portefeuille": {
-    "capital_initial": 0.0,
-    "capital_disponible": 100000.0,
     "valeur_totale": 100000.0,
-    "positions": {}
-  }
+    "pnl_total": 0.0,
+    "capital_disponible": 100000.0,
+    "positions": []
+  },
+  "analyses": [
+    {
+      "heure": "10:16:49",
+      "message": "\ud83d\udcca Analyse X pour $AAPL : Score IA de 5/10"
+    },
+    {
+      "heure": "10:16:49",
+      "message": "\ud83c\udf19 March\u00e9 ferm\u00e9. L'IA s'entra\u00eene sur les donn\u00e9es de X."
+    }
+  ]
 }
