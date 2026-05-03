@@ -1,0 +1,263 @@
+# =============================================================================
+# .github/workflows/bot_route.yml — Pipeline GitHub Actions du bot Route v2
+# =============================================================================
+#
+# MODULES & RÔLES :
+#
+#   [MODULE 1] Déclencheurs (on:)
+#       → schedule        : Toutes les 5 minutes via cron (minimum GitHub Actions)
+#       → push/main       : Relance immédiate à chaque commit — pratique pour déboguer
+#       → workflow_dispatch: Déclenchement manuel depuis l'onglet "Actions" de GitHub
+#       → Rôle : définit QUAND le workflow s'exécute et avec quels paramètres
+#
+#   [MODULE 2] Job principal (jobs.run-bot)
+#       → runs-on ubuntu-latest : VM Linux gratuite GitHub, Python préinstallé
+#       → permissions contents+pages+id-token : nécessaire pour commit JSON et Pages
+#       → Rôle : conteneur d'exécution — environnement dans lequel Python tourne
+#
+#   [MODULE 3] Configuration environnement (steps 1-3)
+#       → actions/checkout : clone le repo dans la VM avec historique git complet
+#       → actions/setup-python : installe Python 3.11 avec cache pip (accélère)
+#       → pip install : installe requests (seule dépendance externe du bot)
+#       → Rôle : prépare la VM pour lancer bot_route.py proprement
+#
+#   [MODULE 4] Exécution du bot (step 4)
+#       → Timeout 4 minutes (< cron 5 min) pour garantir une fin propre
+#       → Variables d'environnement injectées depuis GitHub Secrets (jamais en clair)
+#       → ALPACA_API_KEY, ALPACA_SECRET_KEY, ANTHROPIC_API_KEY lus par Python via os.environ
+#       → Affiche un résumé JSON à la fin du run pour diagnostic rapide
+#       → Rôle : cœur du workflow — fait réellement tourner le bot de trading
+#
+#   [MODULE 5] Publication dashboard (steps 5-7)
+#       → Commit data/etat_bot.json dans le repo après chaque run
+#       → Copie dashboard.html + data/ dans _site/ pour GitHub Pages
+#       → Upload + déploiement sur Pages → URL publique https://<user>.github.io/<repo>/
+#       → Résumé markdown dans l'onglet Actions pour diagnostic visuel
+#       → Rôle : rend le dashboard HTML accessible en ligne sans serveur externe
+#
+# =============================================================================
+# PRÉREQUIS — À configurer UNE SEULE FOIS dans GitHub :
+#
+#   1. Settings > Secrets and variables > Actions > New repository secret :
+#        ALPACA_API_KEY     → Ta clé API Alpaca (régénérée sur app.alpaca.markets)
+#        ALPACA_SECRET_KEY  → Ton secret Alpaca
+#        ANTHROPIC_API_KEY  → Ta clé Anthropic (optionnel — sentiment neutre si absent)
+#
+#   2. Settings > Actions > General > Workflow permissions :
+#        ✓ Read and write permissions
+#        ✓ Allow GitHub Actions to create and approve pull requests
+#
+#   3. Settings > Pages > Source : "GitHub Actions"
+#
+# =============================================================================
+
+name: "📈 Bot Route — Trading Algorithmique Continu"
+
+# ------------------------------------------------------------------
+# [MODULE 1] DÉCLENCHEURS
+# ------------------------------------------------------------------
+on:
+  schedule:
+    # Toutes les 5 minutes (minimum autorisé par GitHub Actions)
+    # Le bot tourne 4 min par run → couverture quasi-continue
+    - cron: "*/5 * * * *"
+
+  push:
+    branches: [ "main", "master" ]
+
+  workflow_dispatch:
+    inputs:
+      intervalle:
+        description: "Secondes entre deux cycles d'analyse"
+        required: false
+        default: "20"
+        type: string
+      activer_sentiment:
+        description: "Activer l'analyse de sentiment IA"
+        required: false
+        default: "true"
+        type: boolean
+
+
+# ------------------------------------------------------------------
+# [MODULE 2] JOB PRINCIPAL
+# ------------------------------------------------------------------
+jobs:
+  run-bot:
+    name: "Cycle trading + déploiement dashboard"
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # Commit du JSON mis à jour dans le repo
+      pages: write      # Publication sur GitHub Pages
+      id-token: write   # Authentification OIDC pour Pages
+
+    steps:
+
+    # --------------------------------------------------------------
+    # [MODULE 3] CONFIGURATION ENVIRONNEMENT
+    # --------------------------------------------------------------
+
+    - name: "📥 Checkout du dépôt"
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # Historique complet pour les commits ultérieurs
+
+    - name: "🐍 Setup Python 3.11"
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip"     # Cache ~/.cache/pip → accélère les runs suivants
+
+    - name: "📦 Installation des dépendances"
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        echo "✅ Dépendances installées :"
+        pip list | grep -E "requests|anthropic"
+
+    # --------------------------------------------------------------
+    # [MODULE 4] EXÉCUTION DU BOT
+    # Les secrets GitHub sont injectés comme variables d'environnement
+    # Python les lit via os.environ.get() — jamais écrits en dur
+    # --------------------------------------------------------------
+
+    - name: "🤖 Exécution du bot Route"
+      timeout-minutes: 4
+      env:
+        # Secrets Alpaca — à définir dans Settings > Secrets > Actions
+        ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
+        ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        ALPACA_BASE_URL:   "https://paper-api.alpaca.markets/v2"
+
+        # Secret Anthropic pour l'analyse de sentiment (optionnel)
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+        # Configuration du bot
+        BOT_INTERVAL_SEC:  ${{ github.event.inputs.intervalle || '20' }}
+        BOT_DATA_PATH:     "data/etat_bot.json"
+
+      run: |
+        echo "════════════════════════════════════════"
+        echo " Bot Route v2 — $(date -u '+%Y-%m-%d %H:%M UTC')"
+        echo "════════════════════════════════════════"
+        echo " Intervalle   : ${BOT_INTERVAL_SEC}s"
+        echo " Broker URL   : ${ALPACA_BASE_URL}"
+        echo " Sentiment IA : ${{ github.event.inputs.activer_sentiment || 'true' }}"
+        echo "════════════════════════════════════════"
+
+        # Création du dossier data/ si absent
+        mkdir -p data
+
+        # Lancement — s'arrête proprement après ~4 min via SIGTERM du timeout
+        python bot_route.py
+
+        echo ""
+        echo "════════════════════════════════════════"
+        echo " Run terminé — $(date -u '+%H:%M:%S UTC')"
+        echo "════════════════════════════════════════"
+
+        # Diagnostic rapide sur le dernier état exporté
+        if [ -f data/etat_bot.json ]; then
+          echo ""
+          echo "📊 Résumé du portefeuille :"
+          python -c "
+        import json
+        with open('data/etat_bot.json') as f:
+            d = json.load(f)
+        meta = d.get('meta', {})
+        pf   = d.get('portefeuille', {})
+        pnl  = pf.get('pnl_total', 0)
+        print(f\"  Cycle          : #{meta.get('cycle', 0)}\")
+        print(f\"  Equity         : \${pf.get('equity', 0):,.2f}\")
+        print(f\"  P&L total      : \${pnl:+,.2f} ({pf.get('pnl_total_pct', 0):+.2f}%)\")
+        print(f\"  Cash dispo     : \${pf.get('cash', 0):,.2f}\")
+        print(f\"  Positions      : {pf.get('nb_positions', 0)}\")
+        print(f\"  Pause drawdown : {meta.get('pause_drawdown', False)}\")
+
+        decs   = d.get('decisions_cycle', [])
+        achats = sum(1 for x in decs if x.get('action_executee')=='ACHAT')
+        ventes = sum(1 for x in decs if x.get('action_executee') in ('VENTE','VENTE_AUTO'))
+        print(f\"  Achats cycle   : {achats}\")
+        print(f\"  Ventes cycle   : {ventes}\")
+          "
+        else
+          echo "⚠  Fichier data/etat_bot.json introuvable"
+        fi
+
+    # --------------------------------------------------------------
+    # [MODULE 5] PUBLICATION DU DASHBOARD
+    # --------------------------------------------------------------
+
+    - name: "💾 Commit des données JSON dans le repo"
+      run: |
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git add data/etat_bot.json
+
+        if git diff --cached --quiet; then
+          echo "Aucune modification — pas de commit nécessaire"
+        else
+          TS=$(date -u '+%Y-%m-%d %H:%M UTC')
+          git commit -m "📈 Route data update — ${TS}"
+          git push
+          echo "✅ data/etat_bot.json commité et pushé"
+        fi
+
+    - name: "📄 Préparation du dossier GitHub Pages"
+      run: |
+        mkdir -p _site
+        # Index = dashboard HTML
+        cp dashboard.html _site/index.html
+        # Données JSON accessibles depuis le dashboard
+        cp -r data _site/data 2>/dev/null || true
+        echo "Contenu _site/ :"
+        ls -lh _site/
+        ls -lh _site/data/ 2>/dev/null || echo "(data/ vide)"
+
+    - name: "📤 Upload artefact GitHub Pages"
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: "_site"
+
+    - name: "🌐 Déploiement GitHub Pages"
+      id: deploy
+      uses: actions/deploy-pages@v4
+
+    - name: "📊 Résumé dans l'onglet Actions"
+      run: |
+        # Ce bloc écrit dans $GITHUB_STEP_SUMMARY
+        # → visible directement dans l'onglet Actions de GitHub
+        {
+          echo "## 📈 Bot Route — Résumé du run"
+          echo ""
+          echo "| Paramètre | Valeur |"
+          echo "|-----------|--------|"
+          echo "| Heure | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+          echo "| Intervalle cycles | ${{ github.event.inputs.intervalle || '20' }}s |"
+          echo "| Dashboard | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ |"
+          echo "| Broker | Alpaca Paper Trading |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ -f data/etat_bot.json ]; then
+          python -c "
+        import json, os
+        with open('data/etat_bot.json') as f:
+            d = json.load(f)
+        meta = d.get('meta', {})
+        pf   = d.get('portefeuille', {})
+        pnl  = pf.get('pnl_total', 0)
+        sign = '+' if pnl >= 0 else ''
+        lines = [
+            f\"| Cycle | #{meta.get('cycle',0)} |\",
+            f\"| Equity | \${pf.get('equity',0):,.2f} |\",
+            f\"| P&L | {sign}\${pnl:,.2f} ({pf.get('pnl_total_pct',0):+.2f}%) |\",
+            f\"| Positions | {pf.get('nb_positions',0)} |\",
+            f\"| Pause drawdown | {meta.get('pause_drawdown',False)} |\",
+        ]
+        summary = os.environ['GITHUB_STEP_SUMMARY']
+        with open(summary, 'a') as f:
+            f.write('\n'.join(lines) + '\n')
+          "
+        fi

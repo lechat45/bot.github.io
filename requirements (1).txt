@@ -1,0 +1,28 @@
+# requirements.txt
+# =============================================================================
+# Dépendances du bot Route v2 — Trading Algorithmique Alpaca
+# =============================================================================
+#
+# Modules EXTERNES (à installer via pip) :
+#
+#   requests>=2.31.0
+#       → Tous les appels HTTP vers Alpaca (ordres, barres OHLC, positions, compte)
+#       → Tous les appels HTTP vers l'API Anthropic (analyse de sentiment Claude)
+#       → Rôle : seule dépendance externe — le reste est bibliothèque standard Python
+#
+# Modules STDLIB utilisés (inclus dans Python 3.11, pas à installer) :
+#
+#   json       → sérialisation/désérialisation du fichier data/etat_bot.json
+#   time       → pauses entre cycles et rate-limiting Alpaca
+#   os         → lecture des variables d'environnement (clés API via GitHub Secrets)
+#   signal     → capture SIGINT/SIGTERM pour arrêt propre sans ordre orphelin
+#   sys        → sortie propre et vérification des imports
+#   logging    → journal horodaté de chaque décision, ordre et erreur
+#   math       → calculs RSI et SMA (abs, min, max, sum)
+#   datetime   → horodatage UTC de chaque trade et snapshot de portefeuille
+#   pathlib    → manipulation de chemins cross-plateforme (data/etat_bot.json)
+#   typing     → annotations Optional, Dict, List pour lisibilité du code
+#
+# =============================================================================
+
+requests>=2.31.0
