@@ -123,7 +123,6 @@ jobs:
     # --------------------------------------------------------------
 
     - name: 🤖 Exécution du bot Route
-  run: python bot_route.py # (ou la commande que tu utilises)
   timeout-minutes: 4
   continue-on-error: true  # <--- Ajoute cette ligne
       env:
