@@ -122,8 +122,10 @@ jobs:
     # Python les lit via os.environ.get() — jamais écrits en dur
     # --------------------------------------------------------------
 
-    - name: "🤖 Exécution du bot Route"
-      timeout-minutes: 4
+    - name: 🤖 Exécution du bot Route
+  run: python bot_route.py # (ou la commande que tu utilises)
+  timeout-minutes: 4
+  continue-on-error: true  # <--- Ajoute cette ligne
       env:
         # Secrets Alpaca — à définir dans Settings > Secrets > Actions
         ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
