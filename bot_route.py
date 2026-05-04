@@ -278,115 +278,109 @@ class AlpacaClient:
 # =============================================================================
 # [MODULE 3] MoteurTechnique — SMA + RSI + signal de décision
 # =============================================================================
-
 class MoteurTechnique:
     """
-    Calcule les indicateurs SMA et RSI sur les données OHLC Alpaca,
-    puis génère un signal de trading structuré.
-    
-    Stratégie implémentée (fidèle à l'analyse Gemini/Aywen) :
-      - Croisement SMA5 > SMA180 = momentum haussier
-      - RSI < RSI_SURVENTE       = sur-vendu, rebond probable
-      - RSI > RSI_SURACHAT       = sur-acheté, éviter l'entrée
-      - Signal BUY  : SMA haussier ET RSI non sur-acheté
-      - Signal SELL : SMA baissier OU RSI sur-acheté
-      - Signal HOLD : signal insuffisant ou RSI neutre
+    Moteur technique amélioré : SMA, HMA, Régression Linéaire et Volume.
+    Chaque algorithme contribue équitablement au signal final.
     """
 
     def __init__(self):
         self.logger = logging.getLogger("MoteurTechnique")
 
+    # --- Utilitaires mathématiques ---
     @staticmethod
-    def _sma(closes: list, periode: int) -> Optional[float]:
-        """Moyenne mobile simple sur 'periode' dernières valeurs."""
-        if len(closes) < periode:
-            return None
-        return sum(closes[-periode:]) / periode
+    def _sma(values: list, p: int) -> Optional[float]:
+        return sum(values[-p:]) / p if len(values) >= p else None
+
+    @staticmethod
+    def _hma(values: list, p: int) -> Optional[float]:
+        """Hull Moving Average : plus réactif que la SMA."""
+        if len(values) < p: return None
+        half_p = int(p / 2)
+        sqrt_p = int(math.sqrt(p))
+        # wma_half = 2 * WMA(n/2) - WMA(n)
+        # Ici on utilise une simplification SMA pour rester léger sans pandas
+        def _simple_wma(data, period):
+            weights = list(range(1, period + 1))
+            return sum(d * w for d, w in zip(data[-period:], weights)) / sum(weights)
+        
+        diff = [2 * _simple_wma(values[:i+1], half_p) - _simple_wma(values[:i+1], p) 
+                for i in range(len(values) - sqrt_p, len(values))]
+        return _simple_wma(diff, sqrt_p)
+
+    @staticmethod
+    def _linreg(values: list, p: int) -> Optional[float]:
+        """Régression Linéaire (Moindres carrés) pour détecter la pente."""
+        if len(values) < p: return None
+        y = values[-p:]
+        x = list(range(p))
+        n = p
+        sum_x = sum(x)
+        sum_y = sum(y)
+        sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+        sum_xx = sum(xi**2 for xi in x)
+        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x**2)
+        intercept = (sum_y - slope * sum_x) / n
+        return slope * (p - 1) + intercept
 
     @staticmethod
     def _rsi(closes: list, periode: int = RSI_PERIODE) -> Optional[float]:
-        """
-        RSI de Wilder sur 'periode' périodes.
-        Formule : RSI = 100 - (100 / (1 + RS))  où RS = moyenne gains / moyenne pertes
-        """
-        if len(closes) < periode + 1:
-            return None
-        deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-        gains  = [d for d in deltas if d > 0]
-        pertes = [abs(d) for d in deltas if d < 0]
-        # Utilise les 'periode' dernières valeurs
-        gains_r  = deltas[-periode:]
-        pertes_r = deltas[-periode:]
-        moy_gains  = sum(g for g in gains_r if g > 0) / periode
-        moy_pertes = sum(abs(p) for p in pertes_r if p < 0) / periode
-        if moy_pertes == 0:
-            return 100.0
-        rs = moy_gains / moy_pertes
-        return round(100 - (100 / (1 + rs)), 2)
+        if len(closes) < periode + 1: return None
+        deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+        last_deltas = deltas[-periode:]
+        up = sum(d for d in last_deltas if d > 0) / periode
+        down = sum(abs(d) for d in last_deltas if d < 0) / periode
+        if down == 0: return 100.0
+        return round(100 - (100 / (1 + (up / down))), 2)
 
     def analyser(self, ticker: str, barres: list) -> dict:
-        """
-        Analyse technique complète sur les barres OHLC.
-        Retourne un dict avec tous les indicateurs et le signal final.
-        """
-        if len(barres) < SMA_LONG_MINUTES + RSI_PERIODE:
-            return {
-                "ticker": ticker,
-                "signal": "HOLD",
-                "raison": "Données insuffisantes pour l'analyse",
-                "sma_court": None,
-                "sma_long":  None,
-                "rsi":       None,
-                "prix":      barres[-1]["c"] if barres else None,
-            }
+        if len(barres) < SMA_LONG_MINUTES:
+            return {"ticker": ticker, "signal": "HOLD", "raison": "Data insuffisante"}
 
         closes = [b["c"] for b in barres]
-        prix_courant = closes[-1]
+        volumes = [b["v"] for b in barres]
+        prix = closes[-1]
 
-        sma_court = self._sma(closes, SMA_COURT_MINUTES)
-        sma_long  = self._sma(closes, SMA_LONG_MINUTES)
-        rsi       = self._rsi(closes, RSI_PERIODE)
+        # 1. Calcul des indicateurs
+        sma_c = self._sma(closes, 5)
+        sma_l = self._sma(closes, 180)
+        hma = self._hma(closes, 10)
+        linreg = self._linreg(closes, 20)
+        rsi = self._rsi(closes, 14)
+        
+        # Filtre de Volume (moyenne 20 dernières minutes)
+        vol_moyen = sum(volumes[-20:]) / 20
+        vol_ok = volumes[-1] > vol_moyen * 1.1 # +10% de volume requis
 
-        # ── Logique de signal ────────────────────────────────────────────────
+        # 2. Système de vote équitable (3 voix)
+        score_bull = 0
+        if sma_c and sma_l and sma_c > sma_l: score_bull += 1
+        if hma and prix > hma: score_bull += 1
+        if linreg and prix > linreg: score_bull += 1
+
+        # 3. Logique de Signal
         signal = "HOLD"
-        raison = ""
+        raison = f"SMA:{'↑' if (sma_c and sma_c>sma_l) else '↓'} HMA:{'↑' if (hma and prix>hma) else '↓'} LR:{'↑' if (linreg and prix>linreg) else '↓'}"
 
-        if sma_court and sma_long and rsi is not None:
-            croisement_haussier = sma_court > sma_long
-            croisement_baissier = sma_court < sma_long
-
-            if croisement_haussier and rsi < RSI_SURACHAT:
-                if rsi < RSI_SURVENTE:
-                    signal = "BUY"
-                    raison = f"SMA5 > SMA180 (momentum↑) + RSI {rsi:.1f} en zone survente — rebond probable"
-                else:
-                    signal = "BUY"
-                    raison = f"SMA5 > SMA180 (momentum↑), RSI {rsi:.1f} neutre — signal valide"
-
-            elif croisement_baissier or rsi > RSI_SURACHAT:
-                signal = "SELL"
-                if rsi > RSI_SURACHAT:
-                    raison = f"RSI {rsi:.1f} en zone surachat — fatigue du marché"
-                else:
-                    raison = f"SMA5 < SMA180 (momentum↓) — tendance baissière confirmée"
-            else:
-                signal = "HOLD"
-                raison = f"Signal insuffisant — SMA neutre, RSI {rsi:.1f}"
-        else:
-            raison = "Indicateurs non calculables (données trop courtes)"
-
-        variation_sma = ((sma_court - sma_long) / sma_long * 100) if (sma_court and sma_long) else 0
+        # BUY : Majorité d'algos (2/3) + RSI pas sur-acheté + Volume actif
+        if score_bull >= 2 and rsi < 65 and vol_ok:
+            signal = "BUY"
+            raison = f"Accord Majoritaire ({score_bull}/3) + Vol OK + RSI {rsi}"
+        # SELL : Si un signal de sortie majeur apparaît ou RSI saturation
+        elif score_bull <= 1 or rsi > 70:
+            signal = "SELL"
+            raison = "Perte de majorité ou RSI sur-achat"
 
         return {
-            "ticker":       ticker,
-            "signal":       signal,
-            "raison":       raison,
-            "sma_court":    round(sma_court, 4) if sma_court else None,
-            "sma_long":     round(sma_long, 4)  if sma_long  else None,
-            "variation_sma_pct": round(variation_sma, 3),
-            "rsi":          rsi,
-            "prix":         round(prix_courant, 4),
-            "timestamp":    datetime.now(timezone.utc).isoformat(),
+            "ticker": ticker,
+            "signal": signal,
+            "raison": raison,
+            "sma_court": sma_c,
+            "sma_long": sma_l,
+            "rsi": rsi,
+            "prix": prix,
+            "vol_ok": vol_ok,
+            "score_algos": f"{score_bull}/3"
         }
 
 
