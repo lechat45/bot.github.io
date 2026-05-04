@@ -1,7 +1,7 @@
 {
   "meta": {
     "cycle": 6,
-    "timestamp": "2026-05-04T17:12:05.533415+00:00",
+    "timestamp": "2026-05-04T17:27:16.820263+00:00",
     "bot_version": "2.0.0-route",
     "broker": "Alpaca Paper Trading",
     "mode": "PAPER",
@@ -9,105 +9,114 @@
   },
   "portefeuille": {
     "capital_initial": 5000.0,
-    "equity": 99748.49,
-    "cash": 73630.4,
-    "buying_power": 173378.89,
-    "pnl_total": 94748.49,
-    "pnl_total_pct": 1894.97,
+    "equity": 99819.22,
+    "cash": 81823.11,
+    "buying_power": 181642.33,
+    "pnl_total": 94819.22,
+    "pnl_total_pct": 1896.38,
     "positions": {
       "AMZN": {
         "ticker": "AMZN",
         "qty": 29.477129639,
         "avg_entry_price": 271.396846,
-        "current_price": 270.61,
-        "market_value": 7976.806052,
-        "unrealized_pl": -23.193961,
-        "unrealized_plpc": -0.29,
+        "current_price": 271.32,
+        "market_value": 7997.734814,
+        "unrealized_pl": -2.265199,
+        "unrealized_plpc": -0.027999999999999997,
         "side": "long"
       },
       "COIN": {
         "ticker": "COIN",
         "qty": 4.913522012,
         "avg_entry_price": 203.52,
-        "current_price": 203.66,
-        "market_value": 1000.687893,
-        "unrealized_pl": 0.687893,
-        "unrealized_plpc": 0.06899999999999999,
-        "side": "long"
-      },
-      "LCID": {
-        "ticker": "LCID",
-        "qty": 151.285930408,
-        "avg_entry_price": 6.61,
-        "current_price": 6.682,
-        "market_value": 1010.892587,
-        "unrealized_pl": 10.892587,
-        "unrealized_plpc": 1.089,
+        "current_price": 204.675,
+        "market_value": 1005.675118,
+        "unrealized_pl": 5.675118,
+        "unrealized_plpc": 0.5680000000000001,
         "side": "long"
       },
       "PLTR": {
         "ticker": "PLTR",
         "qty": 54.277163647,
         "avg_entry_price": 147.391635,
-        "current_price": 146.98,
-        "market_value": 7977.657513,
-        "unrealized_pl": -22.34238,
-        "unrealized_plpc": -0.27899999999999997,
+        "current_price": 147.33,
+        "market_value": 7996.65452,
+        "unrealized_pl": -3.345373,
+        "unrealized_plpc": -0.042,
         "side": "long"
       },
-      "TSLA": {
-        "ticker": "TSLA",
-        "qty": 20.775021577,
-        "avg_entry_price": 389.891292,
-        "current_price": 392.13,
-        "market_value": 8146.509211,
-        "unrealized_pl": 46.509207,
-        "unrealized_plpc": 0.5740000000000001,
+      "SNAP": {
+        "ticker": "SNAP",
+        "qty": 161.29032258,
+        "avg_entry_price": 6.2,
+        "current_price": 6.185,
+        "market_value": 997.580645,
+        "unrealized_pl": -2.419355,
+        "unrealized_plpc": -0.242,
         "side": "long"
       }
     },
-    "nb_positions": 5,
+    "nb_positions": 4,
     "historique_trades": [
       {
-        "type": "VENTE_AUTO",
-        "ticker": "GME",
-        "prix": 24.3869,
-        "pnl": -266.75,
-        "pnl_pct": -3.81,
-        "raison": "STOP-LOSS -3.81%",
-        "timestamp": "2026-05-04T17:08:29.223961+00:00"
+        "type": "VENTE",
+        "ticker": "TSLA",
+        "prix": 391.51,
+        "pnl": 75.0,
+        "pnl_pct": 0.93,
+        "sentiment": 0.55,
+        "timestamp": "2026-05-04T17:23:19.384774+00:00"
+      },
+      {
+        "type": "VENTE",
+        "ticker": "LCID",
+        "prix": 6.68,
+        "pnl": 18.91,
+        "pnl_pct": 1.89,
+        "sentiment": 0.55,
+        "timestamp": "2026-05-04T17:23:36.618159+00:00"
+      },
+      {
+        "type": "ACHAT",
+        "ticker": "SNAP",
+        "montant": 1000.0,
+        "prix": 6.195,
+        "rsi": 25.38,
+        "sentiment": 0.55,
+        "ordre_id": "f98d8a35-dcaa-445a-8ef4-26bdd71fba89",
+        "timestamp": "2026-05-04T17:24:26.465689+00:00"
       }
     ],
     "historique_valeur": [
       {
-        "timestamp": "2026-05-04T17:08:51.308073+00:00",
-        "equity": 99736.91,
-        "cash": 66899.05
-      },
-      {
-        "timestamp": "2026-05-04T17:09:30.481816+00:00",
-        "equity": 99721.97,
+        "timestamp": "2026-05-04T17:23:47.173981+00:00",
+        "equity": 99821.78,
         "cash": 73630.4
       },
       {
-        "timestamp": "2026-05-04T17:10:10.612273+00:00",
-        "equity": 99738.25,
-        "cash": 73630.4
+        "timestamp": "2026-05-04T17:24:36.172608+00:00",
+        "equity": 99827.48,
+        "cash": 82823.11
       },
       {
-        "timestamp": "2026-05-04T17:10:49.515867+00:00",
-        "equity": 99740.15,
-        "cash": 73630.4
+        "timestamp": "2026-05-04T17:25:18.284845+00:00",
+        "equity": 99825.58,
+        "cash": 81823.11
       },
       {
-        "timestamp": "2026-05-04T17:11:27.927588+00:00",
-        "equity": 99758.77,
-        "cash": 73630.4
+        "timestamp": "2026-05-04T17:25:59.238208+00:00",
+        "equity": 99827.22,
+        "cash": 81823.11
       },
       {
-        "timestamp": "2026-05-04T17:12:05.448527+00:00",
-        "equity": 99748.49,
-        "cash": 73630.4
+        "timestamp": "2026-05-04T17:26:35.966426+00:00",
+        "equity": 99822.09,
+        "cash": 81823.11
+      },
+      {
+        "timestamp": "2026-05-04T17:27:16.763211+00:00",
+        "equity": 99819.22,
+        "cash": 81823.11
       }
     ]
   },
@@ -115,16 +124,16 @@
     {
       "ticker": "TSLA",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 44.2 neutre — signal valide",
-      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 44.2 neutre — signal valide",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 391.51,
       "rsi": 44.18,
-      "sma_court": 391.635,
-      "sma_long": 390.8369,
-      "timestamp": "2026-05-04T17:11:48.494051+00:00"
+      "sma_court": 391.6349799999999,
+      "sma_long": 390.83687333333324,
+      "timestamp": "2026-05-04T17:26:56.440794+00:00"
     },
     {
       "ticker": "NVDA",
@@ -132,13 +141,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 67.1 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 67.1 en zone surachat — fatigue du marché",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 198.35,
       "rsi": 67.06,
       "sma_court": 198.402,
-      "sma_long": 198.8018,
-      "timestamp": "2026-05-04T17:11:48.972902+00:00"
+      "sma_long": 198.80183333333324,
+      "timestamp": "2026-05-04T17:26:56.876869+00:00"
     },
     {
       "ticker": "AMD",
@@ -146,27 +155,27 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 357.4,
       "rsi": 45.84,
-      "sma_court": 357.429,
-      "sma_long": 359.9558,
-      "timestamp": "2026-05-04T17:11:49.439946+00:00"
+      "sma_court": 357.4290199999999,
+      "sma_long": 359.95582944444453,
+      "timestamp": "2026-05-04T17:26:57.353317+00:00"
     },
     {
       "ticker": "AMZN",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 47.7 neutre — signal valide",
-      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 47.7 neutre — signal valide",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↑ HMA:↑ LR:↓",
+      "raison_finale": "SMA:↑ HMA:↑ LR:↓",
       "prix": 269.4651,
       "rsi": 47.73,
-      "sma_court": 269.4669,
-      "sma_long": 268.6589,
-      "timestamp": "2026-05-04T17:11:49.897863+00:00"
+      "sma_court": 269.46692,
+      "sma_long": 268.6588655555554,
+      "timestamp": "2026-05-04T17:26:57.817215+00:00"
     },
     {
       "ticker": "NFLX",
@@ -174,13 +183,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 91.545,
       "rsi": 39.08,
       "sma_court": 91.659,
-      "sma_long": 91.8805,
-      "timestamp": "2026-05-04T17:11:50.364023+00:00"
+      "sma_long": 91.8805116666667,
+      "timestamp": "2026-05-04T17:26:58.171910+00:00"
     },
     {
       "ticker": "META",
@@ -188,13 +197,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 608.34,
       "rsi": 49.78,
-      "sma_court": 608.5844,
-      "sma_long": 609.8257,
-      "timestamp": "2026-05-04T17:11:50.821764+00:00"
+      "sma_court": 608.58438,
+      "sma_long": 609.8257166666666,
+      "timestamp": "2026-05-04T17:26:58.608900+00:00"
     },
     {
       "ticker": "AAPL",
@@ -202,41 +211,41 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 278.7091,
       "rsi": 64.1,
-      "sma_court": 278.7498,
-      "sma_long": 278.9536,
-      "timestamp": "2026-05-04T17:11:51.624319+00:00"
+      "sma_court": 278.74982,
+      "sma_long": 278.95356500000014,
+      "timestamp": "2026-05-04T17:26:59.072218+00:00"
     },
     {
       "ticker": "MSFT",
       "action_executee": "AUCUNE",
-      "signal_technique": "SELL",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↓ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↓ HMA:↑ LR:↑",
       "prix": 412.3,
       "rsi": 42.14,
-      "sma_court": 412.2507,
-      "sma_long": 412.9268,
-      "timestamp": "2026-05-04T17:11:52.108017+00:00"
+      "sma_court": 412.25070000000005,
+      "sma_long": 412.9268377777776,
+      "timestamp": "2026-05-04T17:27:00.982148+00:00"
     },
     {
       "ticker": "GOOGL",
       "action_executee": "AUCUNE",
-      "signal_technique": "SELL",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↓ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↓ HMA:↑ LR:↑",
       "prix": 386.0,
       "rsi": 31.33,
-      "sma_court": 385.898,
-      "sma_long": 386.7856,
-      "timestamp": "2026-05-04T17:11:52.639070+00:00"
+      "sma_court": 385.89799999999997,
+      "sma_long": 386.7856305555557,
+      "timestamp": "2026-05-04T17:27:01.350082+00:00"
     },
     {
       "ticker": "INTC",
@@ -244,27 +253,27 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 87.9 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 87.9 en zone surachat — fatigue du marché",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 99.773,
       "rsi": 87.91,
       "sma_court": 99.6165,
-      "sma_long": 99.4885,
-      "timestamp": "2026-05-04T17:11:53.124869+00:00"
+      "sma_long": 99.48849333333334,
+      "timestamp": "2026-05-04T17:27:02.354904+00:00"
     },
     {
       "ticker": "COIN",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 44.6 neutre — signal valide",
-      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 44.6 neutre — signal valide",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↑ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↑ HMA:↑ LR:↑",
       "prix": 197.8,
       "rsi": 44.56,
       "sma_court": 197.748,
-      "sma_long": 197.4308,
-      "timestamp": "2026-05-04T17:11:53.595833+00:00"
+      "sma_long": 197.4308494444444,
+      "timestamp": "2026-05-04T17:27:02.829522+00:00"
     },
     {
       "ticker": "SOFI",
@@ -272,55 +281,55 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 16.437,
       "rsi": 39.62,
-      "sma_court": 16.4794,
-      "sma_long": 16.5262,
-      "timestamp": "2026-05-04T17:11:54.230765+00:00"
+      "sma_court": 16.47936,
+      "sma_long": 16.52620388888889,
+      "timestamp": "2026-05-04T17:27:03.181850+00:00"
     },
     {
       "ticker": "PLTR",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑) + RSI 33.4 en zone survente — rebond probable",
-      "raison_finale": "SMA5 > SMA180 (momentum↑) + RSI 33.4 en zone survente — rebond probable",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↑ HMA:↑ LR:↓",
+      "raison_finale": "SMA:↑ HMA:↑ LR:↓",
       "prix": 147.71,
       "rsi": 33.43,
       "sma_court": 147.7039,
-      "sma_long": 146.9596,
-      "timestamp": "2026-05-04T17:11:54.695151+00:00"
+      "sma_long": 146.95958499999992,
+      "timestamp": "2026-05-04T17:27:03.673591+00:00"
     },
     {
       "ticker": "RIVN",
       "action_executee": "AUCUNE",
-      "signal_technique": "SELL",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↓ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↓ HMA:↑ LR:↑",
       "prix": 14.575,
       "rsi": 34.47,
-      "sma_court": 14.5275,
-      "sma_long": 15.0488,
-      "timestamp": "2026-05-04T17:11:55.301181+00:00"
+      "sma_court": 14.527519999999999,
+      "sma_long": 15.048780555555558,
+      "timestamp": "2026-05-04T17:27:04.035619+00:00"
     },
     {
       "ticker": "LCID",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 58.1 neutre — signal valide",
-      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 58.1 neutre — signal valide",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 6.68,
       "rsi": 58.07,
       "sma_court": 6.7,
-      "sma_long": 6.5363,
-      "timestamp": "2026-05-04T17:11:56.139343+00:00"
+      "sma_long": 6.536331111111109,
+      "timestamp": "2026-05-04T17:27:04.388629+00:00"
     },
     {
       "ticker": "NIO",
@@ -328,13 +337,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 5.981,
       "rsi": 44.94,
-      "sma_court": 5.9942,
-      "sma_long": 6.016,
-      "timestamp": "2026-05-04T17:11:56.598253+00:00"
+      "sma_court": 5.994200000000001,
+      "sma_long": 6.015997222222223,
+      "timestamp": "2026-05-04T17:27:04.855846+00:00"
     },
     {
       "ticker": "UBER",
@@ -342,41 +351,41 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 74.03,
       "rsi": 15.13,
       "sma_court": 74.102,
-      "sma_long": 74.7239,
-      "timestamp": "2026-05-04T17:11:57.066352+00:00"
+      "sma_long": 74.72391555555556,
+      "timestamp": "2026-05-04T17:27:05.316604+00:00"
     },
     {
       "ticker": "LYFT",
       "action_executee": "AUCUNE",
-      "signal_technique": "SELL",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 68.0 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 68.0 en zone surachat — fatigue du marché",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↓ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↓ HMA:↑ LR:↑",
       "prix": 14.12,
       "rsi": 67.99,
-      "sma_court": 14.082,
-      "sma_long": 14.2949,
-      "timestamp": "2026-05-04T17:11:57.537908+00:00"
+      "sma_court": 14.082000000000003,
+      "sma_long": 14.29487277777778,
+      "timestamp": "2026-05-04T17:27:06.190141+00:00"
     },
     {
       "ticker": "SNAP",
       "action_executee": "AUCUNE",
-      "signal_technique": "SELL",
+      "signal_technique": "BUY",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Accord Majoritaire (2/3) + Vol OK + RSI 25.38",
+      "raison_finale": "Accord Majoritaire (2/3) + Vol OK + RSI 25.38",
       "prix": 6.195,
       "rsi": 25.38,
-      "sma_court": 6.188,
-      "sma_long": 6.2567,
-      "timestamp": "2026-05-04T17:11:58.011193+00:00"
+      "sma_court": 6.188040000000001,
+      "sma_long": 6.256716666666664,
+      "timestamp": "2026-05-04T17:27:06.545360+00:00"
     },
     {
       "ticker": "RBLX",
@@ -384,13 +393,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 83.5 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 83.5 en zone surachat — fatigue du marché",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 48.12,
       "rsi": 83.55,
       "sma_court": 47.426,
-      "sma_long": 45.3424,
-      "timestamp": "2026-05-04T17:11:58.576205+00:00"
+      "sma_long": 45.34241222222223,
+      "timestamp": "2026-05-04T17:27:08.439653+00:00"
     },
     {
       "ticker": "HOOD",
@@ -398,13 +407,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 71.0 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 71.0 en zone surachat — fatigue du marché",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 74.93,
       "rsi": 70.97,
-      "sma_court": 74.9154,
-      "sma_long": 75.2753,
-      "timestamp": "2026-05-04T17:11:59.070941+00:00"
+      "sma_court": 74.91539999999999,
+      "sma_long": 75.27534777777781,
+      "timestamp": "2026-05-04T17:27:08.910718+00:00"
     },
     {
       "ticker": "DKNG",
@@ -412,13 +421,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 23.405,
       "rsi": 26.74,
       "sma_court": 23.412,
-      "sma_long": 23.5214,
-      "timestamp": "2026-05-04T17:11:59.538518+00:00"
+      "sma_long": 23.521408888888896,
+      "timestamp": "2026-05-04T17:27:09.417666+00:00"
     },
     {
       "ticker": "PENN",
@@ -426,27 +435,27 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 16.77,
       "rsi": 35.76,
       "sma_court": 16.781,
-      "sma_long": 17.0054,
-      "timestamp": "2026-05-04T17:12:00.454426+00:00"
+      "sma_long": 17.005383888888897,
+      "timestamp": "2026-05-04T17:27:09.921856+00:00"
     },
     {
       "ticker": "GME",
       "action_executee": "AUCUNE",
-      "signal_technique": "BUY",
+      "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 53.2 neutre — signal valide",
-      "raison_finale": "Max positions atteint (5)",
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "SMA:↑ HMA:↑ LR:↑",
+      "raison_finale": "SMA:↑ HMA:↑ LR:↑",
       "prix": 25.85,
       "rsi": 53.22,
-      "sma_court": 25.7841,
-      "sma_long": 25.7637,
-      "timestamp": "2026-05-04T17:12:00.914588+00:00"
+      "sma_court": 25.784100000000002,
+      "sma_long": 25.763673333333337,
+      "timestamp": "2026-05-04T17:27:10.355156+00:00"
     },
     {
       "ticker": "AMC",
@@ -454,13 +463,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "RSI 70.8 en zone surachat — fatigue du marché",
-      "raison_finale": "RSI 70.8 en zone surachat — fatigue du marché",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 1.6,
       "rsi": 70.8,
-      "sma_court": 1.586,
-      "sma_long": 1.4877,
-      "timestamp": "2026-05-04T17:12:01.382735+00:00"
+      "sma_court": 1.5859999999999999,
+      "sma_long": 1.4877472222222208,
+      "timestamp": "2026-05-04T17:27:10.712547+00:00"
     },
     {
       "ticker": "SPY",
@@ -468,13 +477,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 719.55,
       "rsi": 56.69,
       "sma_court": 719.624,
-      "sma_long": 719.9755,
-      "timestamp": "2026-05-04T17:12:01.837615+00:00"
+      "sma_long": 719.9754644444448,
+      "timestamp": "2026-05-04T17:27:11.262505+00:00"
     },
     {
       "ticker": "QQQ",
@@ -482,13 +491,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 673.87,
       "rsi": 49.7,
       "sma_court": 673.91,
-      "sma_long": 674.5068,
-      "timestamp": "2026-05-04T17:12:03.788689+00:00"
+      "sma_long": 674.5068444444443,
+      "timestamp": "2026-05-04T17:27:11.803854+00:00"
     },
     {
       "ticker": "KO",
@@ -496,13 +505,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 78.405,
       "rsi": 24.38,
       "sma_court": 78.424,
-      "sma_long": 78.4397,
-      "timestamp": "2026-05-04T17:12:04.266756+00:00"
+      "sma_long": 78.4397066666667,
+      "timestamp": "2026-05-04T17:27:12.506267+00:00"
     },
     {
       "ticker": "DAL",
@@ -510,13 +519,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 68.609,
       "rsi": 42.32,
-      "sma_court": 68.6668,
-      "sma_long": 69.4587,
-      "timestamp": "2026-05-04T17:12:04.823823+00:00"
+      "sma_court": 68.66676,
+      "sma_long": 69.45866055555554,
+      "timestamp": "2026-05-04T17:27:13.001573+00:00"
     },
     {
       "ticker": "BA",
@@ -524,13 +533,13 @@
       "signal_technique": "SELL",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
-      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
-      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_technique": "Perte de majorité ou RSI sur-achat",
+      "raison_finale": "Perte de majorité ou RSI sur-achat",
       "prix": 222.92,
       "rsi": 40.62,
-      "sma_court": 223.363,
-      "sma_long": 225.1949,
-      "timestamp": "2026-05-04T17:12:05.291543+00:00"
+      "sma_court": 223.36302,
+      "sma_long": 225.19494944444446,
+      "timestamp": "2026-05-04T17:27:16.560266+00:00"
     }
   ],
   "config": {
