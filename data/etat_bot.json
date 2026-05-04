@@ -1,7 +1,7 @@
 {
   "meta": {
-    "cycle": 7,
-    "timestamp": "2026-05-04T13:12:19.738548+00:00",
+    "cycle": 5,
+    "timestamp": "2026-05-04T15:24:38.593011+00:00",
     "bot_version": "2.0.0-route",
     "broker": "Alpaca Paper Trading",
     "mode": "PAPER",
@@ -9,347 +9,147 @@
   },
   "portefeuille": {
     "capital_initial": 5000.0,
-    "equity": 100000.0,
-    "cash": 100000.0,
-    "buying_power": 169800.0,
-    "pnl_total": 95000.0,
-    "pnl_total_pct": 1900.0,
-    "positions": {},
-    "nb_positions": 0,
+    "equity": 99690.67,
+    "cash": 66899.05,
+    "buying_power": 159775.57,
+    "pnl_total": 94690.67,
+    "pnl_total_pct": 1893.81,
+    "positions": {
+      "AMZN": {
+        "ticker": "AMZN",
+        "qty": 29.477129639,
+        "avg_entry_price": 271.396846,
+        "current_price": 272.94,
+        "market_value": 8045.487764,
+        "unrealized_pl": 45.487751,
+        "unrealized_plpc": 0.569,
+        "side": "long"
+      },
+      "COIN": {
+        "ticker": "COIN",
+        "qty": 4.913522012,
+        "avg_entry_price": 203.52,
+        "current_price": 203.73,
+        "market_value": 1001.03184,
+        "unrealized_pl": 1.03184,
+        "unrealized_plpc": 0.10300000000000001,
+        "side": "long"
+      },
+      "GME": {
+        "ticker": "GME",
+        "qty": 276.10112763,
+        "avg_entry_price": 25.35303,
+        "current_price": 24.6526,
+        "market_value": 6806.610659,
+        "unrealized_pl": -193.389513,
+        "unrealized_plpc": -2.763,
+        "side": "long"
+      },
+      "LCID": {
+        "ticker": "LCID",
+        "qty": 151.285930408,
+        "avg_entry_price": 6.61,
+        "current_price": 6.6,
+        "market_value": 998.487141,
+        "unrealized_pl": -1.512859,
+        "unrealized_plpc": -0.151,
+        "side": "long"
+      },
+      "PLTR": {
+        "ticker": "PLTR",
+        "qty": 54.277163647,
+        "avg_entry_price": 147.391635,
+        "current_price": 145.85,
+        "market_value": 7916.324318,
+        "unrealized_pl": -83.675575,
+        "unrealized_plpc": -1.046,
+        "side": "long"
+      },
+      "TSLA": {
+        "ticker": "TSLA",
+        "qty": 20.775021577,
+        "avg_entry_price": 389.891292,
+        "current_price": 386.67,
+        "market_value": 8033.077593,
+        "unrealized_pl": -66.922411,
+        "unrealized_plpc": -0.826,
+        "side": "long"
+      }
+    },
+    "nb_positions": 6,
     "historique_trades": [
       {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
+        "type": "VENTE",
+        "ticker": "AAPL",
+        "prix": 278.7091,
+        "pnl": -0.91,
+        "pnl_pct": -0.91,
         "sentiment": 0.55,
-        "ordre_id": "13015d09-e0a0-4e9a-aa8b-c62b8397daf2",
-        "timestamp": "2026-05-04T13:08:36.503517+00:00"
+        "timestamp": "2026-05-04T15:21:04.811026+00:00"
       },
       {
         "type": "ACHAT",
-        "ticker": "AMZN",
+        "ticker": "COIN",
         "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
+        "prix": 197.8,
+        "rsi": 44.56,
         "sentiment": 0.55,
-        "ordre_id": "82d6cb88-12f9-4496-add7-c436c16f37c3",
-        "timestamp": "2026-05-04T13:08:38.177855+00:00"
+        "ordre_id": "c40784ab-f671-42a4-a644-8fcc410b873a",
+        "timestamp": "2026-05-04T15:22:16.851666+00:00"
       },
       {
         "type": "ACHAT",
-        "ticker": "PLTR",
+        "ticker": "LCID",
         "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
+        "prix": 6.68,
+        "rsi": 58.07,
         "sentiment": 0.55,
-        "ordre_id": "dfde6916-fb3a-433a-874a-a603277a5077",
-        "timestamp": "2026-05-04T13:08:42.751942+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "a7ef0fae-72ab-4623-b36b-55d13116aba4",
-        "timestamp": "2026-05-04T13:08:47.466184+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "84b90c49-f331-4d4e-a993-2f31c66f107c",
-        "timestamp": "2026-05-04T13:09:11.604153+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "5ece3d43-00ac-4850-beba-8665f739add6",
-        "timestamp": "2026-05-04T13:09:13.228907+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "c4f1b86f-332e-4144-b513-9c6cffec3b71",
-        "timestamp": "2026-05-04T13:09:17.637996+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "a6fb5423-a6e1-49c6-8948-0321db59d185",
-        "timestamp": "2026-05-04T13:09:22.390603+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "57a1b2e7-5a93-4b1c-a636-98c1f94437a2",
-        "timestamp": "2026-05-04T13:09:45.759704+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "df54828e-86a3-4598-86d7-235187e2a83f",
-        "timestamp": "2026-05-04T13:09:47.261950+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "400149bd-9e5c-481f-9e75-0d7c4c5a5929",
-        "timestamp": "2026-05-04T13:09:51.599661+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "fb24cc83-41a3-4f66-86ff-dc7ac3f10ae4",
-        "timestamp": "2026-05-04T13:09:56.284559+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "ba9a8acc-4b68-44d8-a398-2be588a070e9",
-        "timestamp": "2026-05-04T13:10:19.612508+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "b00c1af9-4b59-4554-9ef0-d0b610c2324e",
-        "timestamp": "2026-05-04T13:10:21.114515+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "9748c2bd-7b1e-400a-8020-8cab09e952b2",
-        "timestamp": "2026-05-04T13:10:25.389890+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "5d9e9574-1af4-4da8-9d22-efb03b0110b7",
-        "timestamp": "2026-05-04T13:10:30.203881+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "d973e601-e3ae-4444-a31d-8410c723411c",
-        "timestamp": "2026-05-04T13:10:53.751389+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "a4063e63-715e-4b49-ad63-408c0e9a12b7",
-        "timestamp": "2026-05-04T13:10:55.815932+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "da809253-708f-4c13-b781-bf1b7a57ca06",
-        "timestamp": "2026-05-04T13:11:00.246672+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "bcac8ee1-25d0-4ebe-b4d7-2a9531860312",
-        "timestamp": "2026-05-04T13:11:05.395545+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "89c3c49a-d34d-4c79-86af-febce8e63665",
-        "timestamp": "2026-05-04T13:11:28.791829+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "e4fe414b-d69a-422f-be72-92477526c07e",
-        "timestamp": "2026-05-04T13:11:33.417292+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "ab95e9a6-b74f-4de0-be81-99fd008cce97",
-        "timestamp": "2026-05-04T13:11:37.893924+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "51f7284b-65c5-4b1d-be54-b3a2a88c0f37",
-        "timestamp": "2026-05-04T13:11:42.774745+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "TSLA",
-        "montant": 1000.0,
-        "prix": 391.51,
-        "rsi": 44.18,
-        "sentiment": 0.55,
-        "ordre_id": "73b67226-d75a-443b-acff-db3c2f391d40",
-        "timestamp": "2026-05-04T13:12:06.405708+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "AMZN",
-        "montant": 1000.0,
-        "prix": 269.4651,
-        "rsi": 47.73,
-        "sentiment": 0.55,
-        "ordre_id": "38cdeeeb-7329-451f-b6bc-082f8d22c12a",
-        "timestamp": "2026-05-04T13:12:07.937360+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "PLTR",
-        "montant": 1000.0,
-        "prix": 147.71,
-        "rsi": 33.43,
-        "sentiment": 0.55,
-        "ordre_id": "e2f5b770-b51f-4d31-a0f3-abf0216564aa",
-        "timestamp": "2026-05-04T13:12:12.234960+00:00"
-      },
-      {
-        "type": "ACHAT",
-        "ticker": "GME",
-        "montant": 1000.0,
-        "prix": 25.85,
-        "rsi": 53.22,
-        "sentiment": 0.55,
-        "ordre_id": "66321a44-2794-45f7-a10c-f8376e23150e",
-        "timestamp": "2026-05-04T13:12:17.056437+00:00"
+        "ordre_id": "78c39230-96b2-49fc-b21e-61e5ccf41eb8",
+        "timestamp": "2026-05-04T15:22:18.737212+00:00"
       }
     ],
     "historique_valeur": [
       {
-        "timestamp": "2026-05-04T13:08:50.513019+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
+        "timestamp": "2026-05-04T15:21:40.890050+00:00",
+        "equity": 99792.78,
+        "cash": 68800.0
       },
       {
-        "timestamp": "2026-05-04T13:09:24.941079+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
+        "timestamp": "2026-05-04T15:22:29.435421+00:00",
+        "equity": 99672.88,
+        "cash": 68899.05
       },
       {
-        "timestamp": "2026-05-04T13:09:58.842214+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
+        "timestamp": "2026-05-04T15:23:16.266151+00:00",
+        "equity": 99740.57,
+        "cash": 66899.05
       },
       {
-        "timestamp": "2026-05-04T13:10:32.957761+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
+        "timestamp": "2026-05-04T15:23:57.199571+00:00",
+        "equity": 99728.27,
+        "cash": 66899.05
       },
       {
-        "timestamp": "2026-05-04T13:11:07.991451+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
-      },
-      {
-        "timestamp": "2026-05-04T13:11:45.571153+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
-      },
-      {
-        "timestamp": "2026-05-04T13:12:19.659706+00:00",
-        "equity": 100000.0,
-        "cash": 100000.0
+        "timestamp": "2026-05-04T15:24:38.550249+00:00",
+        "equity": 99690.67,
+        "cash": 66899.05
       }
     ]
   },
   "decisions_cycle": [
     {
       "ticker": "TSLA",
-      "action_executee": "ACHAT",
+      "action_executee": "AUCUNE",
       "signal_technique": "BUY",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
       "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 44.2 neutre — signal valide",
-      "raison_finale": "BUY validé : SMA5 > SMA180 (momentum↑), RSI 44.2 neutre — signal valide | sentiment 0.55",
+      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 44.2 neutre — signal valide",
       "prix": 391.51,
       "rsi": 44.18,
       "sma_court": 391.635,
       "sma_long": 390.8369,
-      "timestamp": "2026-05-04T13:12:06.131903+00:00"
+      "timestamp": "2026-05-04T15:24:17.635583+00:00"
     },
     {
       "ticker": "NVDA",
@@ -363,7 +163,7 @@
       "rsi": 67.06,
       "sma_court": 198.402,
       "sma_long": 198.8018,
-      "timestamp": "2026-05-04T13:12:06.706188+00:00"
+      "timestamp": "2026-05-04T15:24:18.084073+00:00"
     },
     {
       "ticker": "AMD",
@@ -377,35 +177,35 @@
       "rsi": 45.84,
       "sma_court": 357.429,
       "sma_long": 359.9558,
-      "timestamp": "2026-05-04T13:12:07.173218+00:00"
+      "timestamp": "2026-05-04T15:24:18.572406+00:00"
     },
     {
       "ticker": "AMZN",
-      "action_executee": "ACHAT",
+      "action_executee": "AUCUNE",
       "signal_technique": "BUY",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
       "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 47.7 neutre — signal valide",
-      "raison_finale": "BUY validé : SMA5 > SMA180 (momentum↑), RSI 47.7 neutre — signal valide | sentiment 0.55",
+      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 47.7 neutre — signal valide",
       "prix": 269.4651,
       "rsi": 47.73,
       "sma_court": 269.4669,
       "sma_long": 268.6589,
-      "timestamp": "2026-05-04T13:12:07.654750+00:00"
+      "timestamp": "2026-05-04T15:24:18.980111+00:00"
     },
     {
       "ticker": "NFLX",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 92.0,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:08.237821+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "prix": 91.545,
+      "rsi": 39.08,
+      "sma_court": 91.659,
+      "sma_long": 91.8805,
+      "timestamp": "2026-05-04T15:24:19.441638+00:00"
     },
     {
       "ticker": "META",
@@ -419,7 +219,7 @@
       "rsi": 49.78,
       "sma_court": 608.5844,
       "sma_long": 609.8257,
-      "timestamp": "2026-05-04T13:12:08.617166+00:00"
+      "timestamp": "2026-05-04T15:24:19.890392+00:00"
     },
     {
       "ticker": "AAPL",
@@ -433,7 +233,7 @@
       "rsi": 64.1,
       "sma_court": 278.7498,
       "sma_long": 278.9536,
-      "timestamp": "2026-05-04T13:12:09.130153+00:00"
+      "timestamp": "2026-05-04T15:24:20.589904+00:00"
     },
     {
       "ticker": "MSFT",
@@ -447,7 +247,7 @@
       "rsi": 42.14,
       "sma_court": 412.2507,
       "sma_long": 412.9268,
-      "timestamp": "2026-05-04T13:12:09.626315+00:00"
+      "timestamp": "2026-05-04T15:24:21.973477+00:00"
     },
     {
       "ticker": "GOOGL",
@@ -461,7 +261,7 @@
       "rsi": 31.33,
       "sma_court": 385.898,
       "sma_long": 386.7856,
-      "timestamp": "2026-05-04T13:12:10.142300+00:00"
+      "timestamp": "2026-05-04T15:24:23.514353+00:00"
     },
     {
       "ticker": "INTC",
@@ -475,21 +275,21 @@
       "rsi": 87.91,
       "sma_court": 99.6165,
       "sma_long": 99.4885,
-      "timestamp": "2026-05-04T13:12:10.610002+00:00"
+      "timestamp": "2026-05-04T15:24:23.927670+00:00"
     },
     {
       "ticker": "COIN",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "BUY",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 198.4785,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:11.092367+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 44.6 neutre — signal valide",
+      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 44.6 neutre — signal valide",
+      "prix": 197.8,
+      "rsi": 44.56,
+      "sma_court": 197.748,
+      "sma_long": 197.4308,
+      "timestamp": "2026-05-04T15:24:24.371873+00:00"
     },
     {
       "ticker": "SOFI",
@@ -503,49 +303,49 @@
       "rsi": 39.62,
       "sma_court": 16.4794,
       "sma_long": 16.5262,
-      "timestamp": "2026-05-04T13:12:11.491874+00:00"
+      "timestamp": "2026-05-04T15:24:24.839090+00:00"
     },
     {
       "ticker": "PLTR",
-      "action_executee": "ACHAT",
+      "action_executee": "AUCUNE",
       "signal_technique": "BUY",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
       "raison_technique": "SMA5 > SMA180 (momentum↑) + RSI 33.4 en zone survente — rebond probable",
-      "raison_finale": "BUY validé : SMA5 > SMA180 (momentum↑) + RSI 33.4 en zone survente — rebond probable | sentiment 0.55",
+      "raison_finale": "SMA5 > SMA180 (momentum↑) + RSI 33.4 en zone survente — rebond probable",
       "prix": 147.71,
       "rsi": 33.43,
       "sma_court": 147.7039,
       "sma_long": 146.9596,
-      "timestamp": "2026-05-04T13:12:11.952321+00:00"
+      "timestamp": "2026-05-04T15:24:25.304295+00:00"
     },
     {
       "ticker": "RIVN",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 15.1416,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:12.535361+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "prix": 14.575,
+      "rsi": 34.47,
+      "sma_court": 14.5275,
+      "sma_long": 15.0488,
+      "timestamp": "2026-05-04T15:24:25.757567+00:00"
     },
     {
       "ticker": "LCID",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "BUY",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 6.5005,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:12.923463+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 58.1 neutre — signal valide",
+      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 58.1 neutre — signal valide",
+      "prix": 6.68,
+      "rsi": 58.07,
+      "sma_court": 6.7,
+      "sma_long": 6.5363,
+      "timestamp": "2026-05-04T15:24:26.170773+00:00"
     },
     {
       "ticker": "NIO",
@@ -559,7 +359,7 @@
       "rsi": 44.94,
       "sma_court": 5.9942,
       "sma_long": 6.016,
-      "timestamp": "2026-05-04T13:12:13.324980+00:00"
+      "timestamp": "2026-05-04T15:24:27.074436+00:00"
     },
     {
       "ticker": "UBER",
@@ -569,11 +369,11 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 75.2,
+      "prix": 75.03,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:13.821276+00:00"
+      "timestamp": "2026-05-04T15:24:27.520254+00:00"
     },
     {
       "ticker": "LYFT",
@@ -583,39 +383,39 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 14.48,
+      "prix": 14.3199,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:14.211736+00:00"
+      "timestamp": "2026-05-04T15:24:30.565538+00:00"
     },
     {
       "ticker": "SNAP",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 6.29,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:14.606825+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "raison_finale": "SMA5 < SMA180 (momentum↓) — tendance baissière confirmée",
+      "prix": 6.195,
+      "rsi": 25.38,
+      "sma_court": 6.188,
+      "sma_long": 6.2567,
+      "timestamp": "2026-05-04T15:24:30.913889+00:00"
     },
     {
       "ticker": "RBLX",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 45.02,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:15.042679+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "RSI 83.5 en zone surachat — fatigue du marché",
+      "raison_finale": "RSI 83.5 en zone surachat — fatigue du marché",
+      "prix": 48.12,
+      "rsi": 83.55,
+      "sma_court": 47.426,
+      "sma_long": 45.3424,
+      "timestamp": "2026-05-04T15:24:31.368829+00:00"
     },
     {
       "ticker": "HOOD",
@@ -629,7 +429,7 @@
       "rsi": 70.97,
       "sma_court": 74.9154,
       "sma_long": 75.2753,
-      "timestamp": "2026-05-04T13:12:15.487070+00:00"
+      "timestamp": "2026-05-04T15:24:31.834081+00:00"
     },
     {
       "ticker": "DKNG",
@@ -639,53 +439,53 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 23.0,
+      "prix": 23.665,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:15.966470+00:00"
+      "timestamp": "2026-05-04T15:24:32.285556+00:00"
     },
     {
       "ticker": "PENN",
       "action_executee": "AUCUNE",
       "signal_technique": "HOLD",
       "score_sentiment": 0.55,
-      "resume_sentiment": "",
-      "raison_technique": "",
-      "raison_finale": "Pas assez de barres (marché fermé ?)",
-      "prix": null,
+      "resume_sentiment": "Non analysé (signal HOLD)",
+      "raison_technique": "Données insuffisantes pour l'analyse",
+      "raison_finale": "Données insuffisantes pour l'analyse",
+      "prix": 17.15,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:16.393314+00:00"
+      "timestamp": "2026-05-04T15:24:32.627594+00:00"
     },
     {
       "ticker": "GME",
-      "action_executee": "ACHAT",
+      "action_executee": "AUCUNE",
       "signal_technique": "BUY",
       "score_sentiment": 0.55,
       "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
       "raison_technique": "SMA5 > SMA180 (momentum↑), RSI 53.2 neutre — signal valide",
-      "raison_finale": "BUY validé : SMA5 > SMA180 (momentum↑), RSI 53.2 neutre — signal valide | sentiment 0.55",
+      "raison_finale": "SMA5 > SMA180 (momentum↑), RSI 53.2 neutre — signal valide",
       "prix": 25.85,
       "rsi": 53.22,
       "sma_court": 25.7841,
       "sma_long": 25.7637,
-      "timestamp": "2026-05-04T13:12:16.778888+00:00"
+      "timestamp": "2026-05-04T15:24:32.973696+00:00"
     },
     {
       "ticker": "AMC",
       "action_executee": "AUCUNE",
-      "signal_technique": "HOLD",
+      "signal_technique": "SELL",
       "score_sentiment": 0.55,
-      "resume_sentiment": "Non analysé (signal HOLD)",
-      "raison_technique": "Données insuffisantes pour l'analyse",
-      "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 1.48,
-      "rsi": null,
-      "sma_court": null,
-      "sma_long": null,
-      "timestamp": "2026-05-04T13:12:17.356951+00:00"
+      "resume_sentiment": "Erreur d'analyse : 401 Client Error: Unauthorized for url: https://api.anthropic.com/v1/messages",
+      "raison_technique": "RSI 70.8 en zone surachat — fatigue du marché",
+      "raison_finale": "RSI 70.8 en zone surachat — fatigue du marché",
+      "prix": 1.6,
+      "rsi": 70.8,
+      "sma_court": 1.586,
+      "sma_long": 1.4877,
+      "timestamp": "2026-05-04T15:24:35.730432+00:00"
     },
     {
       "ticker": "SPY",
@@ -699,7 +499,7 @@
       "rsi": 56.69,
       "sma_court": 719.624,
       "sma_long": 719.9755,
-      "timestamp": "2026-05-04T13:12:17.815292+00:00"
+      "timestamp": "2026-05-04T15:24:36.183682+00:00"
     },
     {
       "ticker": "QQQ",
@@ -713,7 +513,7 @@
       "rsi": 49.7,
       "sma_court": 673.91,
       "sma_long": 674.5068,
-      "timestamp": "2026-05-04T13:12:18.328693+00:00"
+      "timestamp": "2026-05-04T15:24:37.307815+00:00"
     },
     {
       "ticker": "KO",
@@ -723,11 +523,11 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 78.38,
+      "prix": 78.4,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:18.790057+00:00"
+      "timestamp": "2026-05-04T15:24:37.759086+00:00"
     },
     {
       "ticker": "DAL",
@@ -737,11 +537,11 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 68.78,
+      "prix": 69.87,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:19.175938+00:00"
+      "timestamp": "2026-05-04T15:24:38.105718+00:00"
     },
     {
       "ticker": "BA",
@@ -751,11 +551,11 @@
       "resume_sentiment": "Non analysé (signal HOLD)",
       "raison_technique": "Données insuffisantes pour l'analyse",
       "raison_finale": "Données insuffisantes pour l'analyse",
-      "prix": 225.4,
+      "prix": 225.155,
       "rsi": null,
       "sma_court": null,
       "sma_long": null,
-      "timestamp": "2026-05-04T13:12:19.580346+00:00"
+      "timestamp": "2026-05-04T15:24:38.452244+00:00"
     }
   ],
   "config": {
