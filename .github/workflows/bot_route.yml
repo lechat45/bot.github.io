@@ -89,7 +89,10 @@ jobs:
   run-bot:
     name: "Route v4 — Cycle trading + Dashboard"
     runs-on: ubuntu-latest
-
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+      
     permissions:
       contents: write
       pages: write
