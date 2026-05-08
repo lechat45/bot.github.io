@@ -1,7 +1,7 @@
 {
   "meta": {
     "cycle": 10,
-    "timestamp": "2026-05-08T10:11:50.372936+00:00",
+    "timestamp": "2026-05-08T10:48:06.116641+00:00",
     "bot_version": "4.0.0-route",
     "broker": "Alpaca Trade API v2",
     "mode": "PAPER",
@@ -11,114 +11,114 @@
   },
   "portefeuille": {
     "capital_initial": 100000.0,
-    "equity": 99097.45,
+    "equity": 99099.74,
     "cash": 87069.29,
     "buying_power": 379073.64,
-    "pnl_total": -902.55,
+    "pnl_total": -900.26,
     "pnl_total_pct": -0.9,
     "positions": {
       "AMD": {
         "ticker": "AMD",
         "qty": 2.466273707,
         "avg_entry_price": 412.211034,
-        "current_price": 414.83,
-        "market_value": 1023.084322,
-        "unrealized_pl": 6.459087,
-        "unrealized_plpc": 0.635,
-        "highest_price": 414.83
+        "current_price": 414.99,
+        "market_value": 1023.478926,
+        "unrealized_pl": 6.853691,
+        "unrealized_plpc": 0.674,
+        "highest_price": 414.99
       },
       "AMZN": {
         "ticker": "AMZN",
         "qty": 29.477129639,
         "avg_entry_price": 271.396846,
-        "current_price": 271.76,
-        "market_value": 8010.704751,
-        "unrealized_pl": 10.704738,
-        "unrealized_plpc": 0.134,
-        "highest_price": 271.76
+        "current_price": 271.7,
+        "market_value": 8008.936123,
+        "unrealized_pl": 8.93611,
+        "unrealized_plpc": 0.11199999999999999,
+        "highest_price": 271.7
       },
       "NIO": {
         "ticker": "NIO",
         "qty": 167.224080267,
         "avg_entry_price": 5.98,
-        "current_price": 5.89,
-        "market_value": 984.949833,
-        "unrealized_pl": -15.050167,
-        "unrealized_plpc": -1.505,
-        "highest_price": 5.89
+        "current_price": 5.8997,
+        "market_value": 986.571906,
+        "unrealized_pl": -13.428094,
+        "unrealized_plpc": -1.343,
+        "highest_price": 5.8997
       },
       "QQQ": {
         "ticker": "QQQ",
         "qty": 1.439171958,
         "avg_entry_price": 694.844,
-        "current_price": 699.5,
-        "market_value": 1006.700785,
-        "unrealized_pl": 6.700785,
-        "unrealized_plpc": 0.67,
-        "highest_price": 699.5
+        "current_price": 699.78,
+        "market_value": 1007.103753,
+        "unrealized_pl": 7.103753,
+        "unrealized_plpc": 0.7100000000000001,
+        "highest_price": 699.78
       },
       "UBER": {
         "ticker": "UBER",
         "qty": 13.005592404,
         "avg_entry_price": 76.89,
-        "current_price": 77.16,
-        "market_value": 1003.51151,
-        "unrealized_pl": 3.51151,
-        "unrealized_plpc": 0.35100000000000003,
-        "highest_price": 77.16
+        "current_price": 77.2254,
+        "market_value": 1004.362076,
+        "unrealized_pl": 4.362076,
+        "unrealized_plpc": 0.436,
+        "highest_price": 77.2254
       }
     },
     "nb_positions": 5,
     "historique_trades": [],
     "historique_valeur": [
       {
-        "timestamp": "2026-05-08T10:09:34.104691+00:00",
-        "equity": 99097.48,
+        "timestamp": "2026-05-08T10:45:48.556855+00:00",
+        "equity": 99103.94,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:09:52.916704+00:00",
-        "equity": 99097.44,
+        "timestamp": "2026-05-08T10:46:05.686100+00:00",
+        "equity": 99103.78,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:10:07.657988+00:00",
-        "equity": 99097.44,
+        "timestamp": "2026-05-08T10:46:20.679740+00:00",
+        "equity": 99103.73,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:10:22.299317+00:00",
-        "equity": 99097.44,
+        "timestamp": "2026-05-08T10:46:35.701547+00:00",
+        "equity": 99100.23,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:10:36.955260+00:00",
-        "equity": 99097.49,
+        "timestamp": "2026-05-08T10:46:50.718437+00:00",
+        "equity": 99100.23,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:10:51.633803+00:00",
-        "equity": 99097.49,
+        "timestamp": "2026-05-08T10:47:05.810683+00:00",
+        "equity": 99099.61,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:11:06.295131+00:00",
-        "equity": 99097.45,
+        "timestamp": "2026-05-08T10:47:20.850119+00:00",
+        "equity": 99099.62,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:11:20.937274+00:00",
-        "equity": 99097.45,
+        "timestamp": "2026-05-08T10:47:35.867378+00:00",
+        "equity": 99099.62,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:11:35.704388+00:00",
-        "equity": 99097.45,
+        "timestamp": "2026-05-08T10:47:50.954332+00:00",
+        "equity": 99099.74,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T10:11:50.315724+00:00",
-        "equity": 99097.45,
+        "timestamp": "2026-05-08T10:48:06.050377+00:00",
+        "equity": 99099.74,
         "cash": 87069.29
       }
     ]
@@ -156,7 +156,7 @@
         "volume_ratio": 0.01
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 74/100 (tech=76 sent=0.70 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:45.982340+00:00",
+      "timestamp": "2026-05-08T10:48:01.273190+00:00",
       "resume_groq": "Sentiment haussier modéré pour TSLA",
       "facteurs_positifs": [
         "RSI en territoire haussier",
@@ -165,7 +165,7 @@
       ],
       "facteurs_negatifs": [
         "inflation élevée",
-        "taux Fed en hausse"
+        "taux Fed en augmentation"
       ]
     },
     {
@@ -200,10 +200,10 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 68/100 (tech=68 sent=0.70 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:46.125028+00:00",
+      "timestamp": "2026-05-08T10:48:01.422078+00:00",
       "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI élevé indiquant une tendance haussière",
+        "RSI élevé mais pas encore dans la zone de survente",
         "Secteur TECH en croissance",
         "Taux Fed stables"
       ],
@@ -244,16 +244,16 @@
         "volume_ratio": 0.91
       },
       "raison": "Position maintenue",
-      "timestamp": "2026-05-08T10:11:46.262657+00:00",
+      "timestamp": "2026-05-08T10:48:01.566233+00:00",
       "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI en zone haussière",
+        "RSI en territoire haussier",
         "HMA_signal au-dessus",
         "secteur TECH en croissance"
       ],
       "facteurs_negatifs": [
         "ATR élevé indiquant une volatilité accrue",
-        "inflation et taux Fed influençant les marchés"
+        "inflation et taux Fed pouvant impacter la croissance"
       ]
     },
     {
@@ -288,15 +288,15 @@
         "volume_ratio": 1.54
       },
       "raison": "MACD↓",
-      "timestamp": "2026-05-08T10:11:46.401806+00:00",
-      "resume_groq": "Sentiment modérément positif pour AMZN",
+      "timestamp": "2026-05-08T10:48:01.709808+00:00",
+      "resume_groq": "Sentiment légèrement haussier pour AMZN",
       "facteurs_positifs": [
-        "RSI en dessous de 50 indique une possible reprise",
-        "Secteur TECH en légère hausse"
+        "RSI en dessous de 50 indiquant une possible reprise",
+        "Secteur TECH en légère tendance haussière"
       ],
       "facteurs_negatifs": [
-        "Score technique faible à 25/100",
-        "ATR élevé à 0.74% indique une volatilité accrue"
+        "HMA_signal en_dessous suggérant une pression baissière à court terme",
+        "ATR élevé indiquant une volatilité accrue"
       ]
     },
     {
@@ -307,7 +307,7 @@
       "score_fusionne": 32.8,
       "conviction": "FAIBLE",
       "signal_technique": "SELL",
-      "biais_groq": "baissier",
+      "biais_groq": "neutre",
       "croisement_hma": false,
       "prix": 88.26,
       "rsi": 38.29,
@@ -331,15 +331,15 @@
         "volume_ratio": 1.62
       },
       "raison": "MACD↑ | ADX fort(46)",
-      "timestamp": "2026-05-08T10:11:46.544192+00:00",
-      "resume_groq": "Sentiment modérément baissier",
+      "timestamp": "2026-05-08T10:48:01.859587+00:00",
+      "resume_groq": "Sentiment légèrement négatif mais avec des signes de stabilisation",
       "facteurs_positifs": [
-        "RSI en dessous de 40 indique une possible oversold",
-        "TECH secteur en légère reprise"
+        "RSI en dessous de 40 indiquant une possible oversold",
+        "HMA_signal en dessous suggérant un potentiel rebond"
       ],
       "facteurs_negatifs": [
-        "HMA_signal en_dessous suggère une tendance baissière",
-        "ATR élevé indique une volatilité accrue"
+        "Score technique faible à 28/100",
+        "ATR élevé à 0.69% indiquant une volatilité accrue"
       ]
     },
     {
@@ -374,10 +374,10 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 82/100 (tech=90 sent=0.70 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:46.681956+00:00",
+      "timestamp": "2026-05-08T10:48:02.012234+00:00",
       "resume_groq": "Sentiment haussier modéré pour META",
       "facteurs_positifs": [
-        "RSI à 52,0 indiquant une tendance haussière",
+        "RSI à 52.0 indiquant une tendance haussière",
         "Signal de crossover haussier de l'HMA",
         "Score technique élevé à 82/100"
       ],
@@ -418,16 +418,16 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 78/100 (tech=84 sent=0.70 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:46.817226+00:00",
-      "resume_groq": "Sentiment haussier modéré pour AAPL",
+      "timestamp": "2026-05-08T10:48:02.165054+00:00",
+      "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI en zone de croissance",
-        "Signal de crossover haussier de l'HMA",
+        "RSI en zone neutre avec potentiel de montée",
+        "Signal de crossover haussier de l'indicateur HMA",
         "Score technique élevé à 76/100"
       ],
       "facteurs_negatifs": [
         "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité sectorielle dans le TECH"
+        "Volatilité sectorielle dans le secteur TECH"
       ]
     },
     {
@@ -462,15 +462,16 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 66/100 (tech=69 sent=0.62 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:46.947862+00:00",
-      "resume_groq": "Sentiment haussier modéré",
+      "timestamp": "2026-05-08T10:48:02.324051+00:00",
+      "resume_groq": "Sentiment légèrement haussier pour MSFT",
       "facteurs_positifs": [
-        "RSI en dessous de 70",
-        "Score technique élevé",
-        "Secteur TECH en croissance"
+        "RSI en territoire neutre",
+        "Secteur TECH en croissance",
+        "Taux Fed stables"
       ],
       "facteurs_negatifs": [
-        "ATR élevé",
+        "Inflation élevée",
+        "ATR en légère hausse",
         "HMA_signal en_dessous"
       ]
     },
@@ -506,16 +507,16 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 69/100 (tech=69 sent=0.70 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:47.083048+00:00",
-      "resume_groq": "Sentiment haussier modéré pour GOOGL",
+      "timestamp": "2026-05-08T10:48:02.470518+00:00",
+      "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI inférieur à 70",
-        "HMA_signal au_dessus",
+        "RSI en territoire haussier",
+        "HMA_signal au-dessus",
         "secteur TECH en croissance"
       ],
       "facteurs_negatifs": [
-        "inflation élevée",
-        "taux Fed en hausse"
+        "ATR élevé indiquant une volatilité accrue",
+        "inflation et taux Fed influençant la confiance des investisseurs"
       ]
     },
     {
@@ -550,16 +551,17 @@
         "volume_ratio": 0.0
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 80/100 (tech=86 sent=0.70 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:47.218845+00:00",
+      "timestamp": "2026-05-08T10:48:02.619295+00:00",
       "resume_groq": "Sentiment haussier modéré pour INTC",
       "facteurs_positifs": [
-        "RSI à 55,0 indiquant une tendance haussière",
-        "Signal de crossover haussier de l'HMA",
-        "Score technique élevé à 78/100"
+        "RSI à 55.0 indiquant une tendance haussière",
+        "HMA_signal crossover_hausse",
+        "Score technique élevé à 78/100",
+        "Secteur TECH en croissance"
       ],
       "facteurs_negatifs": [
-        "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité sectorielle dans le secteur TECH"
+        "Inflation et taux Fed pouvant impacter la croissance",
+        "ATR à 1.91% indiquant une volatilité élevée"
       ]
     },
     {
@@ -594,24 +596,24 @@
         "volume_ratio": 2.6
       },
       "raison": "MACD↓",
-      "timestamp": "2026-05-08T10:11:47.357972+00:00",
-      "resume_groq": "Sentiment modérément positif",
+      "timestamp": "2026-05-08T10:48:02.771182+00:00",
+      "resume_groq": "Sentiment légèrement haussier pour COIN",
       "facteurs_positifs": [
-        "RSI en territoire neutre",
+        "RSI en zone neutre",
         "HMA_signal au-dessus",
         "dynamiques sectorielles CRYPTO stables"
       ],
       "facteurs_negatifs": [
         "Score technique relativement bas",
-        "inflation et taux Fed incertains"
+        "ATR élevé indiquant une volatilité accrue"
       ]
     },
     {
       "ticker": "SOFI",
       "action_executee": "PRÉPARE",
       "score_technique": 71.0,
-      "score_sentiment": 0.62,
-      "score_fusionne": 71.7,
+      "score_sentiment": 0.7,
+      "score_fusionne": 74.9,
       "conviction": "MOYENNE",
       "signal_technique": "BUY",
       "biais_groq": "haussier",
@@ -637,17 +639,17 @@
         "atr_pct": 1.291,
         "volume_ratio": 2.04
       },
-      "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 72/100 (tech=78 sent=0.62 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:47.492832+00:00",
+      "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 75/100 (tech=78 sent=0.70 biais=haussier | HMA crossover ✓)",
+      "timestamp": "2026-05-08T10:48:02.934338+00:00",
       "resume_groq": "Sentiment haussier modéré pour SOFI",
       "facteurs_positifs": [
-        "RSI à 42.0 indiquant une légère sous-évaluation",
-        "Signal de crossover haussier sur HMA",
-        "Score technique de 71/100"
+        "RSI sous-évalué à 42.0",
+        "Signal de crossover haussier pour HMA",
+        "Score technique élevé à 71/100"
       ],
       "facteurs_negatifs": [
         "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité élevée dans le secteur FINTECH"
+        "Volatilité élevée avec ATR à 1.29%"
       ]
     },
     {
@@ -682,15 +684,15 @@
         "volume_ratio": 0.0
       },
       "raison": "MACD↑",
-      "timestamp": "2026-05-08T10:11:47.630089+00:00",
-      "resume_groq": "Sentiment de marché neutre à légèrement baissier pour PLTR",
+      "timestamp": "2026-05-08T10:48:03.079877+00:00",
+      "resume_groq": "Sentiment de marché prudent pour PLTR",
       "facteurs_positifs": [
-        "FINTECH en croissance",
-        "RSI en dessous de 50"
+        "RSI en dessous de 50 indique une possible reprise",
+        "FINTECH en croissance à long terme"
       ],
       "facteurs_negatifs": [
-        "ATR élevé",
-        "Score technique faible"
+        "ATR élevé indique une volatilité accrue",
+        "Score technique faible à 33/100"
       ]
     },
     {
@@ -725,16 +727,16 @@
         "volume_ratio": 2.21
       },
       "raison": "MACD↑ | RSI survente(29) | ADX fort(51)",
-      "timestamp": "2026-05-08T10:11:47.765466+00:00",
-      "resume_groq": "Sentiment baissier en raison de conditions macroéconomiques défavorables et de données techniques négatives",
+      "timestamp": "2026-05-08T10:48:03.230632+00:00",
+      "resume_groq": "Sentiment baissier en raison de conditions techniques défavorables et de risques sectoriels",
       "facteurs_positifs": [
-        "Secteur EV en croissance à long terme",
-        "Prix actuel potentiellement attractif pour les investisseurs à long terme"
+        "Taux Fed stables",
+        "Inflation sous contrôle"
       ],
       "facteurs_negatifs": [
-        "RSI bas indiquant une survente",
-        "HMA signal en dessous suggérant une tendance baissière",
-        "ATR élevé indiquant une volatilité accrue"
+        "RSI bas",
+        "HMA signal en dessous",
+        "ATR élevé"
       ]
     },
     {
@@ -769,16 +771,16 @@
         "volume_ratio": 1.78
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 72/100 (tech=78 sent=0.62 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:47.901417+00:00",
-      "resume_groq": "Sentiment haussier modéré",
+      "timestamp": "2026-05-08T10:48:03.387569+00:00",
+      "resume_groq": "Sentiment haussier modéré pour LCID",
       "facteurs_positifs": [
-        "RSI sous-évalué à 43.1",
+        "RSI en zone de survente",
         "Signal de crossover haussier de l'HMA",
-        "Score technique élevé à 71/100"
+        "Secteur EV en croissance"
       ],
       "facteurs_negatifs": [
         "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité élevée de l'ATR à 2.20%"
+        "Volatilité élevée de l'actif"
       ]
     },
     {
@@ -813,14 +815,14 @@
         "volume_ratio": 2.22
       },
       "raison": "MACD↑",
-      "timestamp": "2026-05-08T10:11:48.031602+00:00",
-      "resume_groq": "Sentiment prudent en raison de l'incertitude macroéconomique",
+      "timestamp": "2026-05-08T10:48:03.541869+00:00",
+      "resume_groq": "Sentiment prudent en raison de l'incertitude macroéconomique et des indicateurs techniques mitigés",
       "facteurs_positifs": [
-        "RSI en dessous de 50 indiquant une possible reprise",
+        "RSI en dessous de 50, potentiel de rebond",
         "Secteur EV en croissance à long terme"
       ],
       "facteurs_negatifs": [
-        "Taux Fed élevés et inflation pouvant impacter la demande d'EV",
+        "Taux Fed élevés, inflation en hausse, risque de correction",
         "Score technique faible à 32/100"
       ]
     },
@@ -856,16 +858,16 @@
         "volume_ratio": 1.23
       },
       "raison": "Position maintenue",
-      "timestamp": "2026-05-08T10:11:48.165960+00:00",
+      "timestamp": "2026-05-08T10:48:03.684593+00:00",
       "resume_groq": "Sentiment légèrement haussier pour UBER",
       "facteurs_positifs": [
         "RSI en territoire neutre",
         "HMA_signal au-dessus",
-        "secteur MOBILITY en croissance"
+        "Score technique élevé"
       ],
       "facteurs_negatifs": [
-        "inflation élevée",
-        "taux Fed en hausse"
+        "Incertitude macroéconomique",
+        "Volatilité sectorielle"
       ]
     },
     {
@@ -900,11 +902,11 @@
         "volume_ratio": 0.0
       },
       "raison": "HMA ↓ crossover | MACD↓ | RSI survente(30)",
-      "timestamp": "2026-05-08T10:11:48.303421+00:00",
+      "timestamp": "2026-05-08T10:48:03.829236+00:00",
       "resume_groq": "Sentiment baissier dominant",
       "facteurs_positifs": [
         "RSI sous-évalué à 30.1",
-        "Potentiel de rebond dans le secteur MOBILITY"
+        "Potentiel de rebond sectoriel MOBILITY"
       ],
       "facteurs_negatifs": [
         "HMA_signal crossover_baisse",
@@ -944,16 +946,16 @@
         "volume_ratio": 1.75
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 72/100 (tech=78 sent=0.62 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:48.437824+00:00",
-      "resume_groq": "Sentiment haussier modéré",
+      "timestamp": "2026-05-08T10:48:03.971693+00:00",
+      "resume_groq": "Sentiment haussier modéré pour SNAP",
       "facteurs_positifs": [
-        "RSI à 47,5 indiquant une légère sous-évaluation",
-        "Signal de crossover haussier de l'HMA",
-        "Score technique de 71/100"
+        "RSI en zone neutre avec potentiel de rebond",
+        "Signal de crossover haussier sur HMA",
+        "Score technique élevé à 71/100"
       ],
       "facteurs_negatifs": [
-        "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité élevée avec ATR à 2,84%"
+        "Incertitude macroéconomique due aux taux Fed et inflation",
+        "Volatilité élevée avec ATR à 2.84%"
       ]
     },
     {
@@ -988,15 +990,15 @@
         "volume_ratio": 2.58
       },
       "raison": "MACD↑",
-      "timestamp": "2026-05-08T10:11:48.568823+00:00",
-      "resume_groq": "Sentiment prudent en raison de l'incertitude macroéconomique",
+      "timestamp": "2026-05-08T10:48:04.130134+00:00",
+      "resume_groq": "Sentiment neutre avec tendance baissière",
       "facteurs_positifs": [
-        "RSI en dessous de 50 indique une possible reprise",
-        "Secteur SOCIAL en croissance à long terme"
+        "RSI en dessous de 50",
+        "ATR relativement faible"
       ],
       "facteurs_negatifs": [
-        "Taux Fed élevés et inflation peuvent impacter la croissance",
-        "Score technique faible à 30/100"
+        "HMA_signal en dessous",
+        "Score technique faible"
       ]
     },
     {
@@ -1031,16 +1033,16 @@
         "volume_ratio": 0.01
       },
       "raison": "MACD↓",
-      "timestamp": "2026-05-08T10:11:48.700973+00:00",
+      "timestamp": "2026-05-08T10:48:04.282866+00:00",
       "resume_groq": "Sentiment modérément positif pour HOOD",
       "facteurs_positifs": [
-        "RSI en dessous de 50 indiquant une possible reprise",
-        "HMA_signal au-dessus suggérant une tendance haussière",
-        "Secteur CRYPTO en croissance"
+        "RSI en territoire neutre",
+        "HMA_signal au-dessus",
+        "dynamiques sectorielles CRYPTO stables"
       ],
       "facteurs_negatifs": [
-        "Score technique faible à 35/100",
-        "ATR élevé à 1.34% indiquant une volatilité accrue"
+        "Score technique relativement bas",
+        "inflation et taux Fed influençant la volatilité"
       ]
     },
     {
@@ -1075,7 +1077,7 @@
         "volume_ratio": 2.5
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 84/100 (tech=94 sent=0.70 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:48.839051+00:00",
+      "timestamp": "2026-05-08T10:48:04.427540+00:00",
       "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
         "RSI en zone de surachat mais toujours en territoire haussier",
@@ -1083,8 +1085,8 @@
         "Score technique élevé à 85/100"
       ],
       "facteurs_negatifs": [
-        "Inflation élevée et taux Fed en hausse pouvant impacter les marges bénéficiaires",
-        "Volatilité élevée du secteur GAMING"
+        "ATR élevé indiquant une volatilité accrue",
+        "Risque de correction après une montée rapide"
       ]
     },
     {
@@ -1119,16 +1121,16 @@
         "volume_ratio": 1.78
       },
       "raison": "HMA ↓ crossover | MACD↑ | ADX fort(26)",
-      "timestamp": "2026-05-08T10:11:48.976406+00:00",
+      "timestamp": "2026-05-08T10:48:04.572347+00:00",
       "resume_groq": "Sentiment baissier modéré",
       "facteurs_positifs": [
-        "RSI en zone de survente",
-        "Potentiel de rebond sectoriel GAMING"
+        "RSI en territoire neutre",
+        "Potentiel de rebond sectoriel"
       ],
       "facteurs_negatifs": [
         "HMA_signal crossover_baisse",
-        "ATR élevé indiquant une volatilité accrue",
-        "Score technique faible"
+        "Score technique faible",
+        "Incertitude macroéconomique"
       ]
     },
     {
@@ -1163,16 +1165,16 @@
         "volume_ratio": 1.5
       },
       "raison": "MACD↓",
-      "timestamp": "2026-05-08T10:11:49.105779+00:00",
-      "resume_groq": "Sentiment modérément positif pour GME",
+      "timestamp": "2026-05-08T10:48:04.713018+00:00",
+      "resume_groq": "Sentiment légèrement haussier pour GME",
       "facteurs_positifs": [
-        "RSI sous-évalué à 40,5",
-        "HMA_signal au-dessus de la moyenne",
+        "RSI sous-évalué à 40.5",
+        "HMA_signal au-dessus",
         "secteur GAMING en croissance"
       ],
       "facteurs_negatifs": [
         "Score technique faible à 35/100",
-        "ATR élevé à 1,81%"
+        "ATR élevé à 1.81%"
       ]
     },
     {
@@ -1207,23 +1209,24 @@
         "volume_ratio": 1.08
       },
       "raison": "HMA ↓ crossover | MACD↓",
-      "timestamp": "2026-05-08T10:11:49.237905+00:00",
-      "resume_groq": "Sentiment baissier modéré",
+      "timestamp": "2026-05-08T10:48:04.857878+00:00",
+      "resume_groq": "Sentiment baissier modéré sur AMC",
       "facteurs_positifs": [
-        "RSI en dessous de 50 indique une possible correction",
-        "ATR relativement faible suggère une volatilité contenue"
+        "RSI en territoire neutre",
+        "secteur GAMING en croissance à long terme"
       ],
       "facteurs_negatifs": [
-        "HMA_signal crossover_baisse indique une tendance baissière",
-        "Score technique faible de 28/100"
+        "HMA_signal crossover_baisse",
+        "ATR élevé indiquant une volatilité accrue",
+        "score technique faible"
       ]
     },
     {
       "ticker": "SPY",
       "action_executee": "PRÉPARE",
       "score_technique": 71.0,
-      "score_sentiment": 0.62,
-      "score_fusionne": 67.4,
+      "score_sentiment": 0.7,
+      "score_fusionne": 70.6,
       "conviction": "MOYENNE",
       "signal_technique": "BUY",
       "biais_groq": "haussier",
@@ -1249,17 +1252,17 @@
         "atr_pct": 0.251,
         "volume_ratio": 0.0
       },
-      "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 67/100 (tech=71 sent=0.62 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:49.367820+00:00",
-      "resume_groq": "Sentiment légèrement haussier avec prudence",
+      "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 71/100 (tech=71 sent=0.70 biais=haussier)",
+      "timestamp": "2026-05-08T10:48:04.997636+00:00",
+      "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI en territoire neutre",
+        "RSI en territoire haussier",
         "HMA_signal au-dessus",
         "Score technique élevé"
       ],
       "facteurs_negatifs": [
-        "Incertitude macroéconomique",
-        "Volatilité potentielle"
+        "Inflation élevée",
+        "Taux Fed en augmentation"
       ]
     },
     {
@@ -1294,16 +1297,16 @@
         "volume_ratio": 0.0
       },
       "raison": "Position maintenue",
-      "timestamp": "2026-05-08T10:11:49.510983+00:00",
+      "timestamp": "2026-05-08T10:48:05.141272+00:00",
       "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
-        "RSI en territoire haussier",
+        "RSI en zone haussière",
         "HMA_signal au-dessus",
-        "ATR faible indiquant une volatilité contrôlée"
+        "ATR faible"
       ],
       "facteurs_negatifs": [
-        "Score technique à 69/100, laissant place à une légère correction",
-        "Risque de correction sectorielle pour les ETF"
+        "Inflation élevée",
+        "Taux Fed en hausse"
       ]
     },
     {
@@ -1338,15 +1341,15 @@
         "volume_ratio": 2.74
       },
       "raison": "HMA ↓ crossover | MACD↓ | ADX fort(32)",
-      "timestamp": "2026-05-08T10:11:49.645620+00:00",
-      "resume_groq": "Sentiment neutre avec une légère tendance baissière",
+      "timestamp": "2026-05-08T10:48:05.290846+00:00",
+      "resume_groq": "Sentiment neutre à légèrement baissier",
       "facteurs_positifs": [
-        "RSI à 50,6 indiquant une neutralité",
+        "RSI à 50,6 indique une neutralité",
         "secteur AUTRES moins impacté par les fluctuations macroéconomiques"
       ],
       "facteurs_negatifs": [
-        "HMA_signal crossover_baisse indiquant une tendance baissière",
-        "ATR élevé à 0,57% suggérant une volatilité accrue",
+        "HMA_signal crossover_baisse indique une tendance baissière",
+        "ATR élevé à 0,57% suggère une volatilité accrue",
         "Score technique faible à 22/100"
       ]
     },
@@ -1382,16 +1385,16 @@
         "volume_ratio": 1.23
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 78/100 (tech=84 sent=0.70 biais=haussier | HMA crossover ✓)",
-      "timestamp": "2026-05-08T10:11:49.779199+00:00",
-      "resume_groq": "Sentiment haussier modéré",
+      "timestamp": "2026-05-08T10:48:05.440566+00:00",
+      "resume_groq": "Sentiment haussier modéré pour DAL",
       "facteurs_positifs": [
-        "RSI en zone neutre avec potentiel de montée",
+        "RSI en territoire haussier",
         "Signal de crossover haussier de l'HMA",
-        "Score technique élevé à 76/100"
+        "Score technique élevé"
       ],
       "facteurs_negatifs": [
-        "Incertitude macroéconomique due aux taux Fed et à l'inflation",
-        "Volatilité modérée avec ATR à 1.06%"
+        "Incertitude macroéconomique",
+        "Volatilité sectorielle"
       ]
     },
     {
@@ -1426,15 +1429,15 @@
         "volume_ratio": 2.01
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 68/100 (tech=72 sent=0.62 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:49.918198+00:00",
+      "timestamp": "2026-05-08T10:48:05.590542+00:00",
       "resume_groq": "Sentiment légèrement haussier pour BA",
       "facteurs_positifs": [
-        "RSI en territoire neutre",
+        "RSI modérément élevé",
         "Score technique élevé",
-        "Dynamiques sectorielles stables"
+        "Taux Fed stables"
       ],
       "facteurs_negatifs": [
-        "HMA_signal en_dessous",
+        "Inflation en légère hausse",
         "ATR élevé indiquant une volatilité accrue"
       ]
     },
@@ -1472,7 +1475,7 @@
         "volume_ratio": 0.61
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 74/100 (tech=76 sent=0.70 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:50.049198+00:00",
+      "timestamp": "2026-05-08T10:48:05.741192+00:00",
       "resume_groq": "Sentiment haussier modéré",
       "facteurs_positifs": [
         "RSI inférieur à 70",
@@ -1481,8 +1484,7 @@
       ],
       "facteurs_negatifs": [
         "HMA_signal crossover_baisse",
-        "Incertitude macroéconomique",
-        "Volatilité élevée du secteur CRYPTO"
+        "ATR faible indiquant une volatilité réduite"
       ]
     },
     {
@@ -1519,17 +1521,17 @@
         "volume_ratio": 1.16
       },
       "raison": "📋 Ordre préparé (marché fermé) — Score fusionné 71/100 (tech=76 sent=0.62 biais=haussier)",
-      "timestamp": "2026-05-08T10:11:50.215303+00:00",
-      "resume_groq": "Sentiment haussier modéré",
+      "timestamp": "2026-05-08T10:48:05.939118+00:00",
+      "resume_groq": "Sentiment légèrement haussier avec prudence",
       "facteurs_positifs": [
-        "RSI en zone neutre",
+        "RSI en territoire neutre",
         "Score technique élevé",
         "Intérêt institutionnel pour les cryptos"
       ],
       "facteurs_negatifs": [
-        "HMA_signal crossover_baisse",
-        "Incertitude macroéconomique",
-        "Volatilité sectorielle"
+        "HMA_signal indiquant une baisse",
+        "Volatilité élevée du secteur CRYPTO",
+        "Incertitude macroéconomique"
       ]
     }
   ],
