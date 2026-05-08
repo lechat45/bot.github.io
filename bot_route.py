@@ -276,7 +276,8 @@ class AlpacaClientV2:
             else:
                 df = self.api.get_bars(
                     ticker, TimeFrame.Hour,
-                    start=start_str, end=end_str, limit=limit
+                    start=start_str, end=end_str, limit=limit,
+                    feed="iex"
                 ).df
 
             if df is None or df.empty:
