@@ -261,15 +261,22 @@ class AlpacaClientV2:
         Retourne un DataFrame avec colonnes : open, high, low, close, volume
         """
         try:
+            end   = datetime.now(timezone.utc)
+            start = end.replace(hour=0, minute=0, second=0, microsecond=0)
+            # On remonte 10 jours pour avoir assez de bougies horaires
+            start = start - __import__('datetime').timedelta(days=10)
+            start_str = start.strftime("%Y-%m-%d")
+            end_str   = end.strftime("%Y-%m-%d")
+
             if "/" in ticker:
-                # Crypto — même approche que dans le code fourni
                 df = self.api.get_crypto_bars(
-                    ticker, TimeFrame.Hour, limit=limit
+                    ticker, TimeFrame.Hour,
+                    start=start_str, end=end_str, limit=limit
                 ).df
             else:
-                # Actions — timeframe 1 heure
                 df = self.api.get_bars(
-                    ticker, TimeFrame.Hour, limit=limit
+                    ticker, TimeFrame.Hour,
+                    start=start_str, end=end_str, limit=limit
                 ).df
 
             if df is None or df.empty:
