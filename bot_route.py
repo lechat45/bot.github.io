@@ -103,11 +103,11 @@ ALPACA_BASE_URL   = os.environ.get("ALPACA_BASE_URL",   "https://paper-api.alpac
 GROQ_API_KEY      = os.environ.get("GROQ_API_KEY",      "")  # console.groq.com
 
 # ── Money management ────────────────────────────────────────────────────
-CAPITAL_INITIAL       = 5_000.0
+CAPITAL_INITIAL       = 100_000.0
 ALLOCATION_BASE       = 1_000.0   # Allocation standard par trade
 ALLOCATION_FORTE      = 1_200.0   # Conviction FORTE  → +20%
 ALLOCATION_FAIBLE     = 700.0     # Conviction FAIBLE → −30%
-MAX_POSITIONS         = 5
+MAX_POSITIONS         = 9999  # Illimité — seul le cash disponible limite les positions
 STOP_LOSS_PCT         = 0.03      # Stop-loss fixe de secours 3%
 TAKE_PROFIT_PCT       = 0.045     # Take-profit fixe 4.5%
 ATR_STOP_MULTIPLIER   = 1.8       # Stop dynamique = 1.8× ATR
@@ -966,9 +966,7 @@ class BotRoute:
 
         # ── 5. Exécution ──────────────────────────────────────────────────
         if dec["action"] == "ACHAT" and not self.pause_drawdown:
-            if not self.risque.positions_disponibles(len(positions)):
-                base["raison"] = f"Max {MAX_POSITIONS} positions atteint"
-            elif not self.risque.secteur_ok(ticker, positions):
+            if not self.risque.secteur_ok(ticker, positions):
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
             else:
                 montant = self.risque.allocation(
@@ -1058,7 +1056,7 @@ class BotRoute:
         self.logger.info(
             f"Cycle #{self.cycle} | ${compte['equity']:,.2f} | "
             f"P&L {pnl:+,.2f}$ ({pnl_pct:+.2f}%) | "
-            f"Pos {len(positions_apres)}/{MAX_POSITIONS} | "
+            f"Pos {len(positions_apres)} | "
             f"Achats {achats} Ventes {ventes} | HMA cross {hma_cross}"
         )
 
