@@ -1120,6 +1120,10 @@ def main():
         logger.error("ALPACA_API_KEY manquant — arrêt")
         sys.exit(1)
 
+    MAX_CYCLES = 10       # Max cycles par run GitHub Actions
+    LIMITE_SEC = 210      # 3min30 — arrêt propre avant timeout GitHub (4 min)
+    DEBUT_RUN  = time.time()
+
     bot      = BotRoute()
     en_cours = True
 
@@ -1132,6 +1136,12 @@ def main():
     signal.signal(signal.SIGTERM, stopper)
 
     while en_cours:
+        if bot.cycle >= MAX_CYCLES:
+            logger.info(f"✅ {MAX_CYCLES} cycles atteints — arrêt propre.")
+            break
+        if time.time() - DEBUT_RUN >= LIMITE_SEC:
+            logger.info(f"✅ Limite {LIMITE_SEC}s atteinte — arrêt propre.")
+            break
         try:
             etat = bot.run_cycle()
             tmp  = JSON_SORTIE.with_suffix(".tmp")
