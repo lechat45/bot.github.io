@@ -77,7 +77,7 @@ VARIABLES D'ENVIRONNEMENT REQUISES (GitHub Secrets) :
 """
 
 import json, time, os, signal, sys, logging, math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -101,6 +101,10 @@ ALPACA_API_KEY    = os.environ.get("ALPACA_API_KEY",    "")
 ALPACA_SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "")
 ALPACA_BASE_URL   = os.environ.get("ALPACA_BASE_URL",   "https://paper-api.alpaca.markets")
 GROQ_API_KEY      = os.environ.get("GROQ_API_KEY",      "")  # console.groq.com
+DISCORD_WEBHOOK   = os.environ.get("DISCORD_WEBHOOK",   "")  # Discord webhook URL
+
+# ── Fichiers persistants ─────────────────────────────────────────────────
+HISTORIQUE_FILE = Path("data/historique_trades.json")  # Persistant entre runs
 
 # ── Money management ────────────────────────────────────────────────────
 CAPITAL_INITIAL       = 100_000.0
@@ -264,7 +268,7 @@ class AlpacaClientV2:
             end   = datetime.now(timezone.utc)
             start = end.replace(hour=0, minute=0, second=0, microsecond=0)
             # On remonte 10 jours pour avoir assez de bougies horaires
-            start = start - __import__('datetime').timedelta(days=10)
+            start = start - timedelta(days=10)
             start_str = start.strftime("%Y-%m-%d")
             end_str   = end.strftime("%Y-%m-%d")
 
@@ -731,8 +735,108 @@ JSON uniquement, sans texte autour :
 
 
 # =============================================================================
-# [MODULE 5] GestionnaireRisque
+# [MODULE 4b] NotificateurDiscord
 # =============================================================================
+
+class NotificateurDiscord:
+    """Envoie des notifications Discord via webhook sur chaque trade."""
+
+    def __init__(self):
+        self.logger  = logging.getLogger("Discord")
+        self.webhook = DISCORD_WEBHOOK
+
+    def _envoyer(self, contenu: str, embeds: list = None):
+        if not self.webhook:
+            return
+        try:
+            payload = {"content": contenu}
+            if embeds:
+                payload["embeds"] = embeds
+            requests.post(self.webhook, json=payload, timeout=5)
+        except Exception as e:
+            self.logger.warning(f"Discord erreur : {e}")
+
+    def notifier_achat(self, ticker: str, montant: float, prix: float,
+                       conviction: str, score: float, sentiment: float):
+        emoji = "🟢"
+        embed = {
+            "title": f"{emoji} ACHAT — {ticker}",
+            "color": 0x00ff88,
+            "fields": [
+                {"name": "Montant",    "value": f"${montant:.0f}",      "inline": True},
+                {"name": "Prix",       "value": f"${prix:.4f}",         "inline": True},
+                {"name": "Conviction", "value": conviction,             "inline": True},
+                {"name": "Score",      "value": f"{score:.0f}/100",     "inline": True},
+                {"name": "Sentiment",  "value": f"{sentiment:.2f}",     "inline": True},
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        self._envoyer("", embeds=[embed])
+
+    def notifier_vente(self, ticker: str, pnl: float, pnl_pct: float, raison: str):
+        emoji = "🔴" if pnl < 0 else "✅"
+        sign  = "+" if pnl >= 0 else ""
+        embed = {
+            "title": f"{emoji} VENTE — {ticker}",
+            "color": 0xff4444 if pnl < 0 else 0x00ff88,
+            "fields": [
+                {"name": "P&L",   "value": f"{sign}${pnl:.2f} ({sign}{pnl_pct:.2f}%)", "inline": True},
+                {"name": "Raison","value": raison[:100],                                 "inline": False},
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        self._envoyer("", embeds=[embed])
+
+    def notifier_resume(self, equity: float, pnl: float, pnl_pct: float,
+                        nb_positions: int, achats: int, ventes: int):
+        if not self.webhook:
+            return
+        sign = "+" if pnl >= 0 else ""
+        self._envoyer(
+            f"📊 **Résumé cycle** | Equity: ${equity:,.2f} | "
+            f"P&L: {sign}${pnl:.2f} ({sign}{pnl_pct:.2f}%) | "
+            f"Pos: {nb_positions} | Achats: {achats} | Ventes: {ventes}"
+        )
+
+
+# =============================================================================
+# [MODULE 4c] GestionnaireMomentum — Score vs SPY
+# =============================================================================
+
+class GestionnaireMomentum:
+    """Compare la performance de chaque actif vs SPY sur 5 jours."""
+
+    def __init__(self):
+        self.logger   = logging.getLogger("Momentum")
+        self._cache   = {}
+        self._cache_ts = {}
+        self.CACHE_TTL = 300  # 5 minutes
+
+    def score_vs_spy(self, ticker: str, df_actif: pd.DataFrame,
+                     df_spy: pd.DataFrame) -> float:
+        """
+        Retourne un score momentum entre -1.0 et +1.0.
+        +1.0 = actif surperforme fortement SPY
+        -1.0 = actif sous-performe fortement SPY
+        """
+        now = time.time()
+        if ticker in self._cache and (now - self._cache_ts.get(ticker, 0)) < self.CACHE_TTL:
+            return self._cache[ticker]
+
+        try:
+            if len(df_actif) < 5 or len(df_spy) < 5:
+                return 0.0
+            perf_actif = (df_actif["close"].iloc[-1] - df_actif["close"].iloc[-5]) / df_actif["close"].iloc[-5]
+            perf_spy   = (df_spy["close"].iloc[-1]   - df_spy["close"].iloc[-5])   / df_spy["close"].iloc[-5]
+            score = max(-1.0, min(1.0, (perf_actif - perf_spy) * 10))
+            self._cache[ticker]    = round(score, 3)
+            self._cache_ts[ticker] = now
+            return self._cache[ticker]
+        except Exception:
+            return 0.0
+
+
+
 
 class GestionnaireRisque:
     """
@@ -896,12 +1000,36 @@ class BotRoute:
         self.sentiment   = AnalyseurSentimentGroq()
         self.risque      = GestionnaireRisque()
         self.decision    = ScoreDecisionIA()
+        self.discord     = NotificateurDiscord()
+        self.momentum    = GestionnaireMomentum()
         self.logger      = logging.getLogger("BotRoute")
         self.cycle       = 0
-        self.historique_trades: list = []
+        self.historique_trades: list = self._charger_historique()
         self.historique_valeur: list = []
         self.pause_drawdown = False
+        self.df_spy: pd.DataFrame = pd.DataFrame()
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _charger_historique(self) -> list:
+        """Charge l'historique persistant depuis le fichier JSON."""
+        try:
+            if HISTORIQUE_FILE.exists():
+                with open(HISTORIQUE_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.logger.info(f"📂 Historique chargé : {len(data)} trades")
+                    return data
+        except Exception as e:
+            self.logger.warning(f"Historique illisible : {e}")
+        return []
+
+    def _sauvegarder_historique(self):
+        """Sauvegarde l'historique complet dans un fichier persistant."""
+        try:
+            HISTORIQUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(HISTORIQUE_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.historique_trades, f, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            self.logger.warning(f"Erreur sauvegarde historique : {e}")
 
     def _auditer_positions(self, positions: dict):
         for ticker, pos in list(positions.items()):
@@ -932,6 +1060,7 @@ class BotRoute:
             "signal_technique": "HOLD", "biais_groq": "neutre",
             "croisement_hma": False, "prix": None,
             "rsi": None, "atr_pct": None, "indicateurs": {},
+            "momentum_spy": 0.0,
             "raison": "",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -953,6 +1082,11 @@ class BotRoute:
             "atr_pct":          tech["indicateurs"].get("atr_pct"),
             "indicateurs":      tech["indicateurs"],
         })
+
+        # ── 2b. Score momentum vs SPY ─────────────────────────────────────
+        if ticker != "SPY" and not self.df_spy.empty:
+            mom = self.momentum.score_vs_spy(ticker, df, self.df_spy)
+            base["momentum_spy"] = mom
 
         # ── 3. Sentiment Groq (si signal pertinent) ────────────────────
         sent = {"score": 0.55, "resume": "Non analysé",
@@ -1012,6 +1146,11 @@ class BotRoute:
                             "rsi": tech["indicateurs"].get("rsi"),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         })
+                        self._sauvegarder_historique()
+                        self.discord.notifier_achat(
+                            ticker, montant, tech["prix"],
+                            dec["conviction"], dec["score_fusionne"], sent["score"]
+                        )
                         self.logger.info(
                             f"[ACHAT] {ticker} {dec['conviction']} "
                             f"${montant:.0f} | fused={dec['score_fusionne']:.0f} "
@@ -1032,6 +1171,13 @@ class BotRoute:
                     "sentiment": sent["score"],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
+                self._sauvegarder_historique()
+                self.discord.notifier_vente(
+                    ticker,
+                    round(pos.get("unrealized_pl", 0), 2),
+                    round(pos.get("unrealized_plpc", 0), 2),
+                    dec["raison"]
+                )
                 self.logger.info(
                     f"[VENTE] {ticker} P&L {pos.get('unrealized_plpc',0):.2f}% | {dec['raison'][:60]}"
                 )
@@ -1060,6 +1206,9 @@ class BotRoute:
         if marche_ouvert:
             self._auditer_positions(positions)
 
+        # Données SPY pour score momentum
+        self.df_spy = self.alpaca.get_barres("SPY")
+
         decisions = []
         for ticker in ACTIFS_TOUS:
             time.sleep(0.05)
@@ -1071,7 +1220,8 @@ class BotRoute:
             "equity": compte["equity"], "cash": compte["cash"],
         })
         self.historique_valeur = self.historique_valeur[-100:]
-        self.historique_trades = self.historique_trades[-60:]
+        self.historique_trades = self.historique_trades[-500:]  # Garde 500 trades max
+        self._sauvegarder_historique()
 
         try:
             positions_apres = self.alpaca.get_positions()
@@ -1091,6 +1241,13 @@ class BotRoute:
             f"Pos {len(positions_apres)} | "
             f"Achats {achats} Ventes {ventes} | HMA cross {hma_cross}"
         )
+
+        # Résumé Discord en fin de cycle (seulement si trades)
+        if achats > 0 or ventes > 0:
+            self.discord.notifier_resume(
+                compte["equity"], pnl, pnl_pct,
+                len(positions_apres), achats, ventes
+            )
 
         return {
             "meta": {
@@ -1112,7 +1269,8 @@ class BotRoute:
                 "pnl_total_pct":     round(pnl_pct, 2),
                 "positions":         positions_apres,
                 "nb_positions":      len(positions_apres),
-                "historique_trades": self.historique_trades,
+                "historique_trades": self.historique_trades[-60:],   # 60 derniers pour le dashboard
+                "historique_trades_complet": len(self.historique_trades),  # Compte total
                 "historique_valeur": self.historique_valeur,
             },
             "decisions_cycle": decisions,
