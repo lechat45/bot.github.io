@@ -255,7 +255,7 @@ jobs:
     - name: "📄 Préparation GitHub Pages"
       run: |
         mkdir -p _site _site/data
-        cp dashboard.html _site/index.html
+        cp index.html _site/index.html
         cp data/etat_bot.json _site/data/etat_bot.json 2>/dev/null || true
         echo "Contenu _site/ :"
         ls -lh _site/
