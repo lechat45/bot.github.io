@@ -133,7 +133,7 @@ BB_STD              = 2.0
 ADX_PERIODE         = 14
 ADX_SEUIL           = 25
 VOLUME_MULT         = 1.5
-BARRES_LIMIT        = 120   # Bougies 1h récupérées (EMA100 + marge suffisante)
+BARRES_LIMIT        = 120   # Bougies 1h — suffisant pour EMA100 + tous les indicateurs
 
 # ── Pondération score composite (total = 100) ────────────────────────────
 POIDS = {
@@ -229,6 +229,15 @@ class AlpacaClientV2:
             "portfolio_value": float(acc.portfolio_value),
         }
 
+    def marche_ouvert(self) -> bool:
+        """Vérifie si le marché US est actuellement ouvert via le SDK Alpaca."""
+        try:
+            clock = self.api.get_clock()
+            return clock.is_open
+        except Exception as e:
+            self.logger.warning(f"Impossible de vérifier l'état du marché : {e}")
+            return False
+
     def get_positions(self) -> dict:
         """Toutes les positions ouvertes, indexées par symbol."""
         positions = {}
@@ -269,6 +278,7 @@ class AlpacaClientV2:
             # Normalise les noms de colonnes en minuscules
             df.columns = [c.lower() for c in df.columns]
             df = df.sort_index()
+            self.logger.info(f"Barres {ticker} : {len(df)} bougies reçues")
             return df
 
         except Exception as e:
@@ -906,7 +916,7 @@ class BotRoute:
                     })
                     self.logger.info(f"[AUTO] {ticker} — {raison}")
 
-    def _analyser_actif(self, ticker: str, positions: dict, compte: dict) -> dict:
+    def _analyser_actif(self, ticker: str, positions: dict, compte: dict, executer: bool = True) -> dict:
         base = {
             "ticker": ticker, "action_executee": "AUCUNE",
             "score_technique": 50, "score_sentiment": 0.55,
@@ -965,6 +975,13 @@ class BotRoute:
         })
 
         # ── 5. Exécution ──────────────────────────────────────────────────
+        if not executer:
+            # Marché fermé — on prépare la stratégie sans exécuter
+            if dec["action"] == "ACHAT":
+                base["raison"] = f"📋 Ordre préparé (marché fermé) — {dec['raison']}"
+                base["action_executee"] = "PRÉPARE"
+            return base
+
         if dec["action"] == "ACHAT" and not self.pause_drawdown:
             if not self.risque.secteur_ok(ticker, positions):
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
@@ -1017,6 +1034,12 @@ class BotRoute:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
+        marche_ouvert = self.alpaca.marche_ouvert()
+        if marche_ouvert:
+            self.logger.info("🟢 Marché OUVERT — mode trading actif")
+        else:
+            self.logger.info("🔴 Marché FERMÉ — mode analyse/préparation uniquement")
+
         try:
             compte    = self.alpaca.get_compte()
             positions = self.alpaca.get_positions()
@@ -1026,12 +1049,13 @@ class BotRoute:
                     "portefeuille": {}, "decisions_cycle": []}
 
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
-        self._auditer_positions(positions)
+        if marche_ouvert:
+            self._auditer_positions(positions)
 
         decisions = []
         for ticker in ACTIFS_TOUS:
             time.sleep(0.05)
-            d = self._analyser_actif(ticker, positions, compte)
+            d = self._analyser_actif(ticker, positions, compte, executer=marche_ouvert)
             decisions.append(d)
 
         self.historique_valeur.append({
@@ -1069,6 +1093,7 @@ class BotRoute:
                 "mode":            "PAPER",
                 "sentiment_engine":"Groq Cloud llama-3.3-70b",
                 "pause_drawdown":  self.pause_drawdown,
+                "marche_ouvert":   marche_ouvert,
             },
             "portefeuille": {
                 "capital_initial":   self.risque.capital_initial,
