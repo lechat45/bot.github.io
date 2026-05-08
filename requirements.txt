@@ -16,7 +16,7 @@
 #           api.get_account() — equity, cash, buying_power
 #       → Rôle : interface officielle broker — plus stable que les appels REST bruts
 #
-#   pandas-ta >= 0.3.14b
+#   pandas-ta==0.3.14b
 #       → Calcul vectoriel de tous les indicateurs techniques sur DataFrame :
 #           ta.hma(close, length=10)          — Hull MA vitesse (code fourni)
 #           ta.ema(close, length=100)         — Tendance longue (code fourni)
