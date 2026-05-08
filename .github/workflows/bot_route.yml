@@ -111,10 +111,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: "🐍 Setup Python 3.12"
+    - name: "🐍 Setup Python 3.11"
       uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.11"
         cache: "pip"
         cache-dependency-path: "requirements.txt"
 
@@ -132,7 +132,7 @@ jobs:
     # --------------------------------------------------------------
 
     - name: "🤖 Exécution du bot Route v4"
-      timeout-minutes: 3
+      timeout-minutes: 4
       env:
         # ── Secrets broker ─────────────────────────────────────────
         ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
