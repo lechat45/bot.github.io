@@ -767,7 +767,7 @@
       <div class="chip x"><span class="k">HMA⚡</span><span class="v" id="s-hma">0</span></div>
       <div class="chip a"><span class="k">EXEC</span><span class="v" id="s-exec">0</span></div>
       <div class="chip"><span class="k">SCAN</span><span class="v" id="s-scan">0</span></div>
-      <div class="chip"><span class="k">UPDATE</span><span class="v" id="s-update">—</span></div>
+      <div class="chip" id="chip-update"><span class="k">UPDATE</span><span class="v" id="s-update">—</span></div>
     </div>
     <div class="cfg">
       <div class="sys-lbl">◈ CFG</div>
@@ -778,6 +778,18 @@
       <div class="chip"><span class="k">ALLOC</span><span class="v" id="c-al">—</span></div>
       <div class="chip"><span class="k">SENT≥</span><span class="v" id="c-ss">—</span></div>
     </div>
+  </div>
+
+  <!-- Métriques performance -->
+  <div class="sys" style="margin-bottom:10px">
+    <div class="sys-lbl">◈ PERF</div>
+    <div class="chip b"><span class="k">WIN%</span><span class="v" id="m-winrate">—</span></div>
+    <div class="chip"><span class="k">AVG P&amp;L</span><span class="v" id="m-avgpnl">—</span></div>
+    <div class="chip a"><span class="k">TRADES</span><span class="v" id="m-nbtrades">—</span></div>
+    <div class="chip bl"><span class="k">BEST</span><span class="v" id="m-best">—</span></div>
+    <div class="chip s"><span class="k">WORST</span><span class="v" id="m-worst">—</span></div>
+    <div class="chip x"><span class="k">SHARPE</span><span class="v" id="m-sharpe">—</span></div>
+    <div class="chip"><span class="k">TOTAL P&amp;L</span><span class="v" id="m-totalpnl">—</span></div>
   </div>
 
   <!-- Graphique equity -->
@@ -847,10 +859,12 @@
 
     <!-- Trades (sidebar droite) -->
     <div class="pnl" style="min-height:0">
-      <div class="phd">
+      <div class="phd" style="flex-wrap:wrap;gap:8px">
         <span class="phd-t">◈ Trades récents</span>
         <span class="phd-r" id="trade-count">0</span>
       </div>
+      <!-- Histogramme distribution P&L -->
+      <div id="trades-hist" style="padding:8px 14px 4px;border-bottom:1px solid var(--ln)"></div>
       <div class="tscroll" id="trades-body" style="max-height:none">
         <div class="empty">Aucun trade</div>
       </div>
@@ -1031,6 +1045,49 @@ function render(data) {
   $('s-scan').textContent = `${decs.length}/${cfg.nb_actifs??32}`;
   $('s-update').textContent = ts;
 
+  // Indicateur données périmées — UPDATE chip devient amber/rouge si > 60s
+  if (meta.timestamp) {
+    const ageS = (Date.now() - new Date(meta.timestamp).getTime()) / 1000;
+    const chip = document.getElementById('chip-update');
+    if (chip) {
+      if (ageS > 120) {
+        chip.style.borderColor = 'var(--red-30)';
+        chip.querySelector('.v').style.color = 'var(--red)';
+        chip.title = `Données périmées : ${Math.round(ageS)}s`;
+      } else if (ageS > 60) {
+        chip.style.borderColor = 'var(--amb-30)';
+        chip.querySelector('.v').style.color = 'var(--amb)';
+        chip.title = `Données un peu anciennes : ${Math.round(ageS)}s`;
+      } else {
+        chip.style.borderColor = '';
+        chip.querySelector('.v').style.color = 'var(--cyn)';
+        chip.title = '';
+      }
+    }
+  }
+
+  // Métriques performance
+  const m = data.metriques || {};
+  if (m.nb_trades > 0) {
+    const wr = m.win_rate ?? 0;
+    $('m-winrate').textContent  = `${wr.toFixed(1)}%`;
+    $('m-winrate').style.color  = wr >= 55 ? 'var(--acid)' : wr >= 45 ? 'var(--amb)' : 'var(--red)';
+    const avg = m.avg_pnl_pct ?? 0;
+    $('m-avgpnl').textContent   = `${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%`;
+    $('m-avgpnl').style.color   = avg >= 0 ? 'var(--acid)' : 'var(--red)';
+    $('m-nbtrades').textContent = m.nb_trades;
+    const best = m.best_trade ?? 0;
+    $('m-best').textContent     = `+${best.toFixed(2)}%`;
+    const worst = m.worst_trade ?? 0;
+    $('m-worst').textContent    = `${worst.toFixed(2)}%`;
+    const sh = m.sharpe_approx ?? 0;
+    $('m-sharpe').textContent   = sh.toFixed(2);
+    $('m-sharpe').style.color   = sh >= 1 ? 'var(--acid)' : sh >= 0 ? 'var(--amb)' : 'var(--red)';
+    const tp = m.total_pnl ?? 0;
+    $('m-totalpnl').textContent = `${tp >= 0 ? '+' : ''}${fU(tp)}`;
+    $('m-totalpnl').style.color = tp >= 0 ? 'var(--acid)' : 'var(--red)';
+  }
+
   // Cycle flash
   if (meta.cycle !== LAST_CYCLE && LAST_CYCLE !== -1) {
     document.querySelectorAll('.met').forEach(el => {
@@ -1052,27 +1109,40 @@ function render(data) {
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
 }
 
-/* ── Sparkline equity dans la carte hero ──────────────────── */
+/* ── Sparkline equity dans la carte hero (Bezier) ─────────── */
 function renderSpark(hist, init) {
   const svg = $('spark-eq');
   if (hist.length < 2) { svg.innerHTML=''; return; }
   const W = 200, H = 24;
   const vals = hist.map(h => h.equity ?? init);
-  const min = Math.min(...vals, init);
-  const max = Math.max(...vals, init);
-  const rng = max - min || 1;
+  const minV = Math.min(...vals, init);
+  const maxV = Math.max(...vals, init);
+  const rng  = maxV - minV || 1;
   const step = W / (vals.length - 1);
-  const pts = vals.map((v,i) => `${(i*step).toFixed(1)},${(H - (v - min)/rng * H).toFixed(1)}`).join(' L ');
+  const toX  = i => i * step;
+  const toY  = v => H - ((v - minV) / rng) * (H - 2) - 1;
+  // Bezier lissé
+  let path = `M ${toX(0).toFixed(1)},${toY(vals[0]).toFixed(1)}`;
+  for (let i = 1; i < vals.length; i++) {
+    const x0 = toX(i-1), y0 = toY(vals[i-1]);
+    const x1 = toX(i),   y1 = toY(vals[i]);
+    const cx  = (x0+x1)/2;
+    path += ` C ${cx.toFixed(1)},${y0.toFixed(1)} ${cx.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+  }
   const last = vals[vals.length-1];
-  const col = last >= init ? '#b8ff00' : '#ff3860';
+  const col  = last >= init ? '#b8ff00' : '#ff3860';
+  const lx   = toX(vals.length-1).toFixed(1);
+  const ly   = toY(last).toFixed(1);
   svg.innerHTML = `
     <defs><linearGradient id="sgg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${col}" stop-opacity=".35"/>
+      <stop offset="0%"   stop-color="${col}" stop-opacity=".40"/>
       <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
     </linearGradient></defs>
-    <path d="M ${pts} L ${W},${H} L 0,${H} Z" fill="url(#sgg)"/>
-    <path d="M ${pts}" fill="none" stroke="${col}" stroke-width="1.4" stroke-linecap="round"
-          stroke-linejoin="round" filter="drop-shadow(0 0 3px ${col})"/>`;
+    <path d="${path} L ${W},${H} L 0,${H} Z" fill="url(#sgg)"/>
+    <path d="${path}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linecap="round"
+          filter="drop-shadow(0 0 4px ${col})"/>
+    <circle cx="${lx}" cy="${ly}" r="2.5" fill="${col}" stroke="#02040a" stroke-width="1"
+            filter="drop-shadow(0 0 5px ${col})"/>`;
 }
 
 /* ── Positions ──────────────────────────────────────────────── */
@@ -1120,8 +1190,11 @@ function renderPositions(positions) {
 /* ── Trades ─────────────────────────────────────────────────── */
 function renderTrades(trades) {
   const body = $('trades-body');
+  const hist = $('trades-hist');
   $('trade-count').textContent = trades.length;
   if (!trades.length) { body.innerHTML = '<div class="empty">Aucun trade</div>'; return; }
+  // Histogramme P&L dans le header
+  if (hist) hist.innerHTML = renderPnlHistogram(trades);
   body.innerHTML = trades.slice(0,40).map(t => {
     const isBuy  = t.type==='ACHAT';
     const isAuto = t.type==='VENTE_AUTO';
@@ -1154,31 +1227,57 @@ function renderTrades(trades) {
   }).join('');
 }
 
+/* ── Mini sparkline inline ─────────────────────────────────── */
+function miniSpark(vals, col, w=52, h=18) {
+  if (!vals || vals.length < 2) return '';
+  const min = Math.min(...vals), max = Math.max(...vals), rng = max-min||1;
+  const toX = i => (i/(vals.length-1))*w;
+  const toY = v => h - ((v-min)/rng)*(h-3) - 1.5;
+  let d = `M ${toX(0).toFixed(1)},${toY(vals[0]).toFixed(1)}`;
+  for (let i=1;i<vals.length;i++){
+    const cx=(toX(i-1)+toX(i))/2;
+    d+=` C ${cx.toFixed(1)},${toY(vals[i-1]).toFixed(1)} ${cx.toFixed(1)},${toY(vals[i]).toFixed(1)} ${toX(i).toFixed(1)},${toY(vals[i]).toFixed(1)}`;
+  }
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;flex-shrink:0">
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="1.3" stroke-linecap="round"
+          opacity="0.75" filter="drop-shadow(0 0 2px ${col})"/>
+    <circle cx="${toX(vals.length-1).toFixed(1)}" cy="${toY(vals[vals.length-1]).toFixed(1)}"
+            r="2" fill="${col}"/></svg>`;
+}
+
 /* ── Top movers + sectors ────────────────────────────────── */
 function renderMovers(decs, positions) {
   const arr = decs.filter(d => d.prix != null);
-  // Movers basés sur P&L des positions ouvertes si dispo, sinon sur score sentiment
   const posArr = Object.values(positions);
+  const scoreMap = {};
+  arr.forEach(d => { scoreMap[d.ticker] = d.score_fusionne ?? d.score_technique ?? 50; });
+
   let up, dn;
   if (posArr.length) {
-    const sorted = posArr.slice().sort((a,b) => (b.unrealized_plpc||0) - (a.unrealized_plpc||0));
-    up = sorted.slice(0, 3).filter(p => (p.unrealized_plpc||0) > 0);
+    const sorted = posArr.slice().sort((a,b) => (b.unrealized_plpc||0)-(a.unrealized_plpc||0));
+    up = sorted.slice(0,3).filter(p => (p.unrealized_plpc||0) > 0);
     dn = sorted.slice(-3).reverse().filter(p => (p.unrealized_plpc||0) < 0);
   } else {
-    const s = arr.slice().sort((a,b) => (b.score_fusionne||b.score_technique||0) - (a.score_fusionne||a.score_technique||0));
-    up = s.slice(0,3).map(d => ({ ticker:d.ticker, current_price:d.prix, unrealized_plpc: d.score_fusionne ?? d.score_technique, _proxy:true }));
-    dn = s.slice(-3).reverse().map(d => ({ ticker:d.ticker, current_price:d.prix, unrealized_plpc: d.score_fusionne ?? d.score_technique, _proxy:true, _neg:true }));
+    const s = arr.slice().sort((a,b) => (b.score_fusionne||b.score_technique||0)-(a.score_fusionne||a.score_technique||0));
+    up = s.slice(0,3).map(d => ({ticker:d.ticker,current_price:d.prix,unrealized_plpc:d.score_fusionne??d.score_technique,_proxy:true}));
+    dn = s.slice(-3).reverse().map(d => ({ticker:d.ticker,current_price:d.prix,unrealized_plpc:d.score_fusionne??d.score_technique,_proxy:true}));
   }
 
-  const renderItem = (p, dir) => `
-    <div class="mvitem ${dir}">
-      <span class="s">${esc(p.ticker)}</span>
-      <span class="p">${fU(p.current_price ?? 0)}</span>
-      <span class="v">${p._proxy ? (p.unrealized_plpc??0).toFixed(0)+' pts' : fP(p.unrealized_plpc)}</span>
+  const renderItem = (p, dir) => {
+    const col = dir==='up'?'#b8ff00':'#ff3860';
+    const sc  = scoreMap[p.ticker];
+    // Simule une mini-tendance avec le score et des variations légères
+    const sv  = sc != null ? [sc*.88,sc*.92,sc*.89,sc*.95,sc*.93,sc] : null;
+    return `<div class="mvitem ${dir}" style="grid-template-columns:52px 1fr auto auto;gap:6px;align-items:center">
+      <span class="s" style="font-size:11px">${esc(p.ticker)}</span>
+      <span class="p" style="font-size:8px">${fU(p.current_price??0)}</span>
+      ${sv ? miniSpark(sv,col) : ''}
+      <span class="v">${p._proxy?(p.unrealized_plpc??0).toFixed(0)+' pts':fP(p.unrealized_plpc)}</span>
     </div>`;
+  };
 
-  $('movers-up').innerHTML = up.length ? up.map(p => renderItem(p,'up')).join('') : '<div class="empty" style="padding:10px 0">Pas de gain</div>';
-  $('movers-dn').innerHTML = dn.length ? dn.map(p => renderItem(p,'down')).join('') : '<div class="empty" style="padding:10px 0">Pas de perte</div>';
+  $('movers-up').innerHTML = up.length ? up.map(p=>renderItem(p,'up')).join('') : '<div class="empty" style="padding:10px 0">Pas de gain</div>';
+  $('movers-dn').innerHTML = dn.length ? dn.map(p=>renderItem(p,'down')).join('') : '<div class="empty" style="padding:10px 0">Pas de perte</div>';
 }
 
 /* Mapping secteurs aligné sur bot_route.py */
@@ -1193,13 +1292,38 @@ const SECTORS = {
   ETF:     ["SPY","QQQ"],
   AUTRES:  ["KO","DAL","BA"],
 };
+const SECT_COLORS_HEX = {
+  TECH:'#00fff2',CRYPTO:'#ff9500',FINTECH:'#ff2d78',EV:'#b8ff00',
+  MOBILITY:'#4e8cff',SOCIAL:'#b56dff',GAMING:'#ff2d78',ETF:'#00fff2',AUTRES:'#5a7090'
+};
 function getSect(t) {
   for (const [s, list] of Object.entries(SECTORS)) if (list.includes(t)) return s;
   return 'AUTRES';
 }
+
+/* ── Donut chart SVG ──────────────────────────────────────── */
+function buildDonut(segments, cx, cy, R, stroke) {
+  const total = segments.reduce((s,x) => s + x.v, 0) || 1;
+  const circ  = 2 * Math.PI * R;
+  let offset  = 0;
+  let arcs = '';
+  for (const seg of segments) {
+    const len = (seg.v / total) * circ;
+    // gap de 2px entre segments
+    const gap = Math.min(2, len * 0.08);
+    arcs += `<circle cx="${cx}" cy="${cy}" r="${R}"
+      fill="none" stroke="${seg.col}" stroke-width="${stroke}"
+      stroke-dasharray="${Math.max(0,len-gap)} ${circ-(len-gap)}"
+      stroke-dashoffset="${-offset + circ/4}"
+      opacity="0.92"/>`;
+    offset += len;
+  }
+  return arcs;
+}
+
 function renderSectors(positions, decs) {
   const wrap = $('sect-wrap');
-  const arr = Object.values(positions);
+  const arr  = Object.values(positions);
   $('sect-meta').textContent = `${arr.length} pos · ${decs.length} scan`;
 
   if (!arr.length) {
@@ -1210,20 +1334,69 @@ function renderSectors(positions, decs) {
   const buckets = {};
   arr.forEach(p => {
     const s = getSect(p.ticker);
-    buckets[s] = (buckets[s]||0) + (p.market_value||0);
+    if (!buckets[s]) buckets[s] = 0;
+    buckets[s] += (p.market_value||0);
   });
-  const colors = {TECH:'var(--cyn)',CRYPTO:'var(--amb)',FINTECH:'var(--mag)',EV:'var(--acid)',MOBILITY:'var(--blu)',SOCIAL:'var(--vio)',GAMING:'var(--mag)',ETF:'var(--cyn)',AUTRES:'var(--t2)'};
-  wrap.innerHTML = Object.entries(buckets)
-    .sort((a,b)=>b[1]-a[1])
-    .map(([s,v]) => {
-      const pct = (v/total*100).toFixed(1);
-      const col = colors[s]||'var(--cyn)';
-      return `<div class="sect-row">
-        <span class="sect-name">${s}</span>
-        <div class="sect-bar"><div class="sect-fill" style="width:${pct}%;background:${col}"></div></div>
-        <span class="sect-val" style="color:${col}">${pct}%</span>
-      </div>`;
-    }).join('');
+  const sorted = Object.entries(buckets).sort((a,b) => b[1]-a[1]);
+  const segs = sorted.map(([s,v]) => ({ s, v, col: SECT_COLORS_HEX[s]||'#5a7090' }));
+
+  const donut = buildDonut(segs, 44, 44, 32, 13);
+
+  const legend = sorted.map(([s,v]) => {
+    const pct = (v/total*100).toFixed(1);
+    const col = SECT_COLORS_HEX[s]||'#5a7090';
+    return `<div class="sect-row" style="padding:3px 0">
+      <span class="sect-name" style="color:${col};font-size:8.5px">${s}</span>
+      <div class="sect-bar" style="height:2px">
+        <div class="sect-fill" style="width:${pct}%;background:${col}"></div>
+      </div>
+      <span class="sect-val" style="color:${col};font-size:8.5px">${pct}%</span>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div style="display:grid;grid-template-columns:88px 1fr;gap:10px;align-items:center;padding:10px 14px 8px">
+      <svg width="88" height="88" viewBox="0 0 88 88">
+        <circle cx="44" cy="44" r="32" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="13"/>
+        ${donut}
+        <text x="44" y="41" font-size="10" font-family="JetBrains Mono,monospace"
+              fill="#5a7090" text-anchor="middle" letter-spacing="0.5">EXPO</text>
+        <text x="44" y="54" font-size="9" font-family="JetBrains Mono,monospace"
+              fill="#dce8f8" text-anchor="middle" font-weight="700">${arr.length} pos</text>
+      </svg>
+      <div>${legend}</div>
+    </div>`;
+}
+
+/* ── P&L distribution histogram ────────────────────────────── */
+function renderPnlHistogram(trades) {
+  const sells = trades.filter(t => t.pnl_pct != null && t.type !== 'ACHAT');
+  if (sells.length < 2) return '';
+  const bins  = [-Infinity,-5,-2,0,2,5,Infinity];
+  const lbls  = ['<-5','-5/-2','-2/0','0/2','2/5','>5'];
+  const cols  = ['#ff2d78','#ff3860','#ff9500','#4e8cff','#b8ff00','#00fff2'];
+  const cnt   = new Array(6).fill(0);
+  sells.forEach(t => {
+    const p = t.pnl_pct;
+    for (let i = 0; i < bins.length-1; i++) {
+      if (p >= bins[i] && p < bins[i+1]) { cnt[i]++; break; }
+    }
+  });
+  const maxC = Math.max(...cnt) || 1;
+  const W=220, H=50, bW=28, gap=8, offX=10, offY=4;
+  const bars = cnt.map((c,i) => {
+    const bH = Math.max(2, (c/maxC)*(H-offY-14));
+    const x  = offX + i*(bW+gap);
+    const y  = H - 14 - bH;
+    return `
+      <rect x="${x}" y="${y}" width="${bW}" height="${bH}" fill="${cols[i]}" opacity="0.75" rx="2"
+            filter="drop-shadow(0 0 3px ${cols[i]})"/>
+      <text x="${x+bW/2}" y="${H-2}" font-size="7" font-family="JetBrains Mono,monospace"
+            fill="#5a7090" text-anchor="middle">${lbls[i]}</text>
+      ${c>0?`<text x="${x+bW/2}" y="${y-3}" font-size="7.5" font-family="JetBrains Mono,monospace"
+            fill="${cols[i]}" text-anchor="middle" font-weight="700">${c}</text>`:''}`;
+  }).join('');
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">${bars}</svg>`;
 }
 
 /* ── Filtres grille actifs ─────────────────────────────────── */
@@ -1263,8 +1436,12 @@ function renderAssets(decs, positions) {
     const hmaX  = d.croisement_hma    ?? false;
     const ind   = d.indicateurs       ?? {};
     const biais = d.biais_groq        ?? 'neutre';
+    const conf  = d.score_sentiment != null && d.biais_groq !== 'neutre' ? null : null; // placeholder
     const raison= d.raison ?? '';
     const held  = !!(positions[d.ticker] || positions[d.ticker?.replace('/','')]);
+    // Confidence Groq : visible seulement si analysé (source != skip)
+    const groqAnalysed = d.biais_groq && d.biais_groq !== 'neutre' || d.resume_groq;
+    const confVal = groqAnalysed ? sent : null;
 
     const cardC = exe==='ACHAT'?'achat':exe==='VENTE'?'vente':sig==='BUY'?'buy':sig==='SELL'?'sell':'hold';
     const heldC = held ? ' held' : '';
@@ -1272,11 +1449,26 @@ function renderAssets(decs, positions) {
     const gCol  = sent>=0.6?'var(--acid)':sent<=0.4?'var(--red)':'var(--amb)';
     const fCol  = fus>=60?'var(--acid)':fus<=40?'var(--red)':'var(--cyn)';
 
-    let rsiBadge = '';
-    if (rsi!=null) {
-      const rc = rsi>65?'rsi-hot':rsi<35?'rsi-cold':'rsi-neu';
-      rsiBadge = `<span class="rsi-b ${rc}">RSI ${rsi.toFixed(0)}</span>`;
+    // Arc RSI SVG (mini gauge demi-cercle)
+    let rsiArc = '';
+    if (rsi != null) {
+      const pct = Math.max(0, Math.min(100, rsi));
+      const r=11, cx=14, cy=14, circ=Math.PI*r; // demi-cercle
+      const fill = (pct/100)*circ;
+      const rc   = rsi>65?'#ff3860':rsi<35?'#b8ff00':'#ff9500';
+      const startX = cx-r, startY = cy, endX = cx+r, endY = cy;
+      rsiArc = `<svg width="28" height="16" viewBox="0 0 28 16" style="display:inline-block;vertical-align:middle;margin-right:3px" title="RSI ${rsi.toFixed(0)}">
+        <path d="M ${startX},${startY} A ${r},${r} 0 0,1 ${endX},${endY}" fill="none"
+              stroke="rgba(255,255,255,0.08)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M ${startX},${startY} A ${r},${r} 0 0,1 ${endX},${endY}" fill="none"
+              stroke="${rc}" stroke-width="3" stroke-linecap="round"
+              stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"
+              filter="drop-shadow(0 0 2px ${rc})"/>
+        <text x="${cx}" y="${cy+1}" font-size="6" font-family="JetBrains Mono,monospace"
+              fill="${rc}" text-anchor="middle" font-weight="700">${rsi.toFixed(0)}</text>
+      </svg>`;
     }
+
     const cvCls = conv==='FORTE'?'cv-f':conv==='MOYENNE'?'cv-m':'cv-w';
     const exeH  = exe==='ACHAT'?'<span class="aexe exe-b">▲ BUY</span>'
                  :exe==='VENTE'?'<span class="aexe exe-v">▼ SELL</span>'
@@ -1287,6 +1479,11 @@ function renderAssets(decs, positions) {
     const biaisCls = biais==='haussier'?'biais-h':biais==='baissier'?'biais-b':'biais-n';
     const biaisTxt = biais==='haussier'?'↑ HAUS':biais==='baissier'?'↓ BAIS':'· NEUT';
 
+    // Badge confidence Groq (seulement si Groq a analysé cet actif)
+    const confBadge = confVal != null
+      ? `<span class="cv-b" style="border:1px solid rgba(181,109,255,0.30);color:var(--vio);background:rgba(181,109,255,0.08);font-size:7px" title="Score sentiment Groq">⬡ ${(confVal*100).toFixed(0)}</span>`
+      : '';
+
     const chips = [];
     if (ind.hma_signal?.includes('hausse')) chips.push(`<span class="ichip b" title="HMA en hausse">HMA↑</span>`);
     else if (ind.hma_signal?.includes('baisse')) chips.push(`<span class="ichip r" title="HMA en baisse">HMA↓</span>`);
@@ -1294,16 +1491,17 @@ function renderAssets(decs, positions) {
     else if (ind.macd_hist<0) chips.push(`<span class="ichip r" title="MACD négatif">MACD−</span>`);
     if (ind.adx>25) chips.push(`<span class="ichip m" title="ADX > 25 — tendance forte">ADX${ind.adx?.toFixed(0)}</span>`);
     if (ind.volume_ratio>1.5) chips.push(`<span class="ichip b" title="Volume × moyenne">V×${ind.volume_ratio?.toFixed(1)}</span>`);
-    if (ind.ema100_signal === 'prix_au_dessus') chips.push(`<span class="ichip bl" title="Prix > EMA100">>EMA</span>`);
+    if (ind.ema100_signal === 'prix_au_dessus') chips.push(`<span class="ichip bl" title="Prix > EMA100">&gt;EMA</span>`);
     if (ind.atr_pct) chips.push(`<span class="ichip" title="ATR %">ATR${ind.atr_pct?.toFixed(1)}</span>`);
 
-    // BB position
+    // BB position — gradient rouge/vert + marqueur
     let bbBlock = '';
     if (ind.bb_upper && ind.bb_lower && prix) {
-      const range = ind.bb_upper - ind.bb_lower;
+      const range  = ind.bb_upper - ind.bb_lower || 1;
       const posPct = Math.max(0, Math.min(100, (prix - ind.bb_lower) / range * 100));
-      bbBlock = `<div class="bb-bar" title="Position dans Bollinger Bands">
-        <div class="bb-mark" style="left:${posPct}%"></div>
+      const bbCol  = posPct > 75 ? '#ff3860' : posPct < 25 ? '#b8ff00' : '#00fff2';
+      bbBlock = `<div class="bb-bar" title="BB pos ${posPct.toFixed(0)}% · L:${ind.bb_lower?.toFixed(2)} M:${ind.bb_mid?.toFixed(2)} U:${ind.bb_upper?.toFixed(2)}">
+        <div class="bb-mark" style="left:${posPct}%;background:${bbCol};box-shadow:0 0 5px ${bbCol}"></div>
       </div>`;
     }
 
@@ -1335,7 +1533,7 @@ function renderAssets(decs, positions) {
       </div>
       ${bbBlock}
       <div style="margin-top:6px;display:flex;align-items:center;flex-wrap:wrap;gap:3px">
-        ${rsiBadge}<span class="cv-b ${cvCls}">${conv}</span><span class="biais ${biaisCls}">${biaisTxt}</span>
+        ${rsiArc}<span class="cv-b ${cvCls}">${conv}</span><span class="biais ${biaisCls}">${biaisTxt}</span>${confBadge}
       </div>
       ${chips.length?`<div class="indrow">${chips.join('')}</div>`:''}
       ${raison?`<div class="areason"><span class="lab">RAISON</span> ${esc(raison)}</div>`:''}
@@ -1362,110 +1560,162 @@ function renderTape(decs) {
 
 
 /* ==========================================================
-   [MODULE 5] GRAPHIQUE SVG EQUITY — Cyberpunk néon
+   [MODULE 5] GRAPHIQUE SVG EQUITY — Cyberpunk néon v2
+   Courbe Bezier lissée, grille fine, gradient double, point pulsant
 ========================================================== */
+function bezierPath(pts) {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0,y0] = pts[i-1], [x1,y1] = pts[i];
+    const cpx = (x0 + x1) / 2;
+    d += ` C ${cpx.toFixed(1)},${y0.toFixed(1)} ${cpx.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+  }
+  return d;
+}
+
 function renderChart(hist, init) {
   const svg = $('eq-svg');
   $('chart-meta').textContent = `${hist.length} pts`;
 
   if (hist.length < 2) {
     svg.innerHTML = `<text x="50%" y="55%" fill="#253048" text-anchor="middle"
-      font-size="12" font-family="JetBrains Mono,monospace" letter-spacing="2">DONNÉES INSUFFISANTES</text>`;
+      font-size="12" font-family="JetBrains Mono,monospace" letter-spacing="3">DONNÉES INSUFFISANTES</text>`;
     $('chart-min').textContent = 'MIN —';
     $('chart-max').textContent = 'MAX —';
     return;
   }
 
-  const W=1000, H=180, P={t:14,r:60,b:22,l:14};
+  const W=1000, H=180, P={t:16,r:68,b:26,l:8};
   const iW=W-P.l-P.r, iH=H-P.t-P.b;
   const vals = hist.map(h => h.equity ?? init);
-  const minV = Math.min(...vals, init) * 0.997;
-  const maxV = Math.max(...vals, init) * 1.003;
+  const minV = Math.min(...vals, init) * 0.9975;
+  const maxV = Math.max(...vals, init) * 1.0025;
   const rng  = maxV - minV || 1;
+  const last = vals[vals.length-1];
+  const col  = last >= init ? '#b8ff00' : '#ff3860';
+  const col2 = last >= init ? 'rgba(184,255,0,' : 'rgba(255,56,96,';
+  const up   = last >= init;
 
   $('chart-min').textContent = 'MIN ' + fU0(Math.min(...vals));
   $('chart-max').textContent = 'MAX ' + fU0(Math.max(...vals));
 
-  const toX = i => P.l + (i/(vals.length-1))*iW;
-  const toY = v => P.t + iH*(1-(v-minV)/rng);
-
-  const pts  = vals.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
-  const path = `M ${pts.join(' L ')}`;
-  const last  = vals[vals.length-1];
+  const toX = i  => P.l + (i / (vals.length - 1)) * iW;
+  const toY = v  => P.t + iH * (1 - (v - minV) / rng);
+  const pts  = vals.map((v, i) => [toX(i), toY(v)]);
+  const path = bezierPath(pts);
   const baseY = toY(init).toFixed(1);
-  const col   = last>=init?'#b8ff00':'#ff3860';
-  const glow  = last>=init?'rgba(184,255,0,0.4)':'rgba(255,56,96,0.4)';
-  const lx    = toX(vals.length-1).toFixed(1);
-  const ly    = toY(last).toFixed(1);
+  const lx = pts[pts.length-1][0].toFixed(1);
+  const ly = pts[pts.length-1][1].toFixed(1);
 
-  // Y-axis ticks (4 niveaux)
-  const ticks = [];
-  for (let k=0;k<=4;k++) {
-    const v = minV + rng*k/4;
+  // Grille Y — 6 niveaux
+  const gridLines = [];
+  for (let k = 0; k <= 5; k++) {
+    const v = minV + rng * k / 5;
     const y = toY(v).toFixed(1);
-    ticks.push(`<line x1="${P.l}" y1="${y}" x2="${W-P.r}" y2="${y}" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
-                <text x="${W-P.r+6}" y="${(parseFloat(y)+3).toFixed(0)}" font-size="9"
-                       font-family="JetBrains Mono,monospace" fill="#5a7090">${fU0(v)}</text>`);
+    const isBase = Math.abs(parseFloat(y) - parseFloat(baseY)) < 2;
+    gridLines.push(`
+      <line x1="${P.l}" y1="${y}" x2="${W-P.r}" y2="${y}"
+            stroke="${isBase ? 'rgba(255,149,0,0.15)' : 'rgba(0,255,242,0.05)'}"
+            stroke-width="${isBase ? 1 : 0.5}"/>
+      <text x="${W-P.r+5}" y="${(+y+3.5).toFixed(0)}"
+            font-size="8.5" font-family="JetBrains Mono,monospace"
+            fill="${isBase ? 'rgba(255,149,0,0.55)' : '#253048'}" letter-spacing="0.5">${fU0(v)}</text>`);
   }
 
-  // X-axis: première et dernière timestamp
-  const t0 = hist[0].timestamp ? new Date(hist[0].timestamp) : null;
-  const tN = hist[hist.length-1].timestamp ? new Date(hist[hist.length-1].timestamp) : null;
+  // Grille X — 4 verticales légères
+  const gridV = [];
+  for (let k = 1; k <= 3; k++) {
+    const x = (P.l + iW * k / 4).toFixed(1);
+    gridV.push(`<line x1="${x}" y1="${P.t}" x2="${x}" y2="${H-P.b}"
+                      stroke="rgba(0,255,242,0.04)" stroke-width="0.5"/>`);
+  }
+
+  // Labels X
   const fmt = d => d ? d.toLocaleString('fr-FR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  const t0 = hist[0].timestamp       ? new Date(hist[0].timestamp) : null;
+  const tN = hist[hist.length-1].timestamp ? new Date(hist[hist.length-1].timestamp) : null;
+  const tM = hist[Math.floor(hist.length/2)]?.timestamp ? new Date(hist[Math.floor(hist.length/2)].timestamp) : null;
+
+  // Zone gain/perte au-dessus de la ligne base
+  const clipUpper = `M ${P.l},${baseY} L ${pts.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' L ')} L ${lx},${baseY} Z`;
+  const clipLower = `M ${P.l},${baseY} L ${pts.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' L ')} L ${lx},${H-P.b} L ${P.l},${H-P.b} Z`;
 
   svg.innerHTML = `
     <defs>
-      <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${col}" stop-opacity=".30"/>
-        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+      <linearGradient id="gUp" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#b8ff00" stop-opacity=".28"/>
+        <stop offset="100%" stop-color="#b8ff00" stop-opacity="0"/>
       </linearGradient>
-      <linearGradient id="gline" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="${col}" stop-opacity=".4"/>
+      <linearGradient id="gDn" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#ff3860" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#ff3860" stop-opacity=".22"/>
+      </linearGradient>
+      <linearGradient id="gLine" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%"   stop-color="${col}" stop-opacity=".35"/>
+        <stop offset="60%"  stop-color="${col}" stop-opacity=".85"/>
         <stop offset="100%" stop-color="${col}" stop-opacity="1"/>
       </linearGradient>
+      <filter id="glow-line">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <clipPath id="clip-chart"><rect x="${P.l}" y="${P.t}" width="${iW}" height="${iH}"/></clipPath>
     </defs>
 
-    ${ticks.join('')}
+    ${gridLines.join('')}
+    ${gridV.join('')}
 
-    <!-- ligne base capital initial -->
+    <!-- Ligne capital initial -->
     <line x1="${P.l}" y1="${baseY}" x2="${W-P.r}" y2="${baseY}"
-          stroke="rgba(255,149,0,0.35)" stroke-width="1" stroke-dasharray="4,5"/>
-    <text x="${P.l+4}" y="${(parseFloat(baseY)-4).toFixed(0)}"
-          font-size="8.5" font-family="JetBrains Mono,monospace" letter-spacing="1.5"
-          fill="rgba(255,149,0,0.6)">CAPITAL ${fU0(init)}</text>
+          stroke="rgba(255,149,0,0.40)" stroke-width="1" stroke-dasharray="5,6"/>
+    <text x="${P.l+6}" y="${(+baseY - 5).toFixed(0)}"
+          font-size="8" font-family="JetBrains Mono,monospace" letter-spacing="1.5"
+          fill="rgba(255,149,0,0.65)">CAPITAL INITIAL ${fU0(init)}</text>
 
-    <!-- aire sous courbe -->
-    <path d="${path} L ${lx},${H-P.b} L ${P.l},${H-P.b} Z" fill="url(#g1)"/>
+    <!-- Aire de gain (au-dessus de la base) -->
+    <path d="${clipUpper}" fill="url(#gUp)" clip-path="url(#clip-chart)" opacity="${up?1:0}"/>
 
-    <!-- ligne -->
-    <path d="${path}" fill="none" stroke="url(#gline)" stroke-width="2"
+    <!-- Aire de perte (sous la base) -->
+    <path d="${clipLower}" fill="url(#gDn)" clip-path="url(#clip-chart)" opacity="${up?0:1}"/>
+
+    <!-- Remplissage général -->
+    <path d="${path} L ${lx},${H-P.b} L ${P.l},${H-P.b} Z"
+          fill="${col2}0.07)" clip-path="url(#clip-chart)"/>
+
+    <!-- Halo glow derrière la ligne -->
+    <path d="${path}" fill="none" stroke="${col}" stroke-width="7"
           stroke-linecap="round" stroke-linejoin="round"
-          filter="drop-shadow(0 0 6px ${col})"/>
+          opacity=".07" clip-path="url(#clip-chart)"/>
 
-    <!-- glow doublé -->
-    <path d="${path}" fill="none" stroke="${col}" stroke-width="6"
-          stroke-linecap="round" opacity=".06"/>
+    <!-- Ligne principale lissée -->
+    <path d="${path}" fill="none" stroke="url(#gLine)" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round"
+          filter="url(#glow-line)" clip-path="url(#clip-chart)"/>
 
-    <!-- point pulsant -->
-    <circle cx="${lx}" cy="${ly}" r="9" fill="${col}" opacity="0.18"/>
-    <circle cx="${lx}" cy="${ly}" r="4.5"
-            fill="${col}" stroke="#02040a" stroke-width="2"
-            filter="drop-shadow(0 0 10px ${glow})"/>
+    <!-- Halo pulsant sur le dernier point -->
+    <circle cx="${lx}" cy="${ly}" r="12" fill="${col}" opacity="0.10">
+      <animate attributeName="r" values="8;14;8" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.12;0.04;0.12" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="${lx}" cy="${ly}" r="5" fill="${col}" stroke="#02040a" stroke-width="2"
+            filter="drop-shadow(0 0 8px ${col})"/>
 
-    <!-- valeur live -->
-    <rect x="${(parseFloat(lx)+8).toFixed(0)}" y="${(parseFloat(ly)-12).toFixed(0)}"
-          width="50" height="18" fill="#02040a" stroke="${col}" stroke-width="1" rx="2"/>
-    <text x="${(parseFloat(lx)+33).toFixed(0)}" y="${(parseFloat(ly)+1).toFixed(0)}"
-          font-size="10" font-family="JetBrains Mono,monospace"
-          fill="${col}" text-anchor="middle" font-weight="700">
-      ${fU0(last)}
-    </text>
+    <!-- Badge valeur live -->
+    <rect x="${Math.min(+lx+9, W-P.r-58).toFixed(0)}" y="${(+ly-13).toFixed(0)}"
+          width="56" height="19" fill="#0c1422" stroke="${col}" stroke-width="1" rx="3"
+          filter="drop-shadow(0 0 4px ${col2}0.4))"/>
+    <text x="${Math.min(+lx+37, W-P.r-30).toFixed(0)}" y="${(+ly+1.5).toFixed(0)}"
+          font-size="10.5" font-family="JetBrains Mono,monospace"
+          fill="${col}" text-anchor="middle" font-weight="700" letter-spacing="0.5">${fU0(last)}</text>
 
-    <!-- axes X labels -->
-    <text x="${P.l}" y="${H-6}" font-size="8" font-family="JetBrains Mono,monospace"
-          fill="#253048" letter-spacing="1">${fmt(t0)}</text>
-    <text x="${W-P.r}" y="${H-6}" font-size="8" font-family="JetBrains Mono,monospace"
-          fill="#253048" letter-spacing="1" text-anchor="end">${fmt(tN)}</text>`;
+    <!-- Labels X -->
+    <text x="${P.l+2}" y="${H-8}" font-size="8" font-family="JetBrains Mono,monospace"
+          fill="#253048" letter-spacing="0.8">${fmt(t0)}</text>
+    ${tM ? `<text x="${(P.l + iW/2).toFixed(0)}" y="${H-8}" font-size="8" font-family="JetBrains Mono,monospace"
+            fill="#253048" text-anchor="middle" letter-spacing="0.8">${fmt(tM)}</text>` : ''}
+    <text x="${(W-P.r-2).toFixed(0)}" y="${H-8}" font-size="8" font-family="JetBrains Mono,monospace"
+          fill="#253048" text-anchor="end" letter-spacing="0.8">${fmt(tN)}</text>`;
 }
 </script>
 </body>

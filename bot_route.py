@@ -76,7 +76,7 @@ VARIABLES D'ENVIRONNEMENT REQUISES (GitHub Secrets) :
 =============================================================================
 """
 
-import json, time, os, signal, sys, logging, math
+import json, time, os, signal, sys, logging, math, sqlite3, statistics
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -190,6 +190,21 @@ DATA_DIR    = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json")).parent
 JSON_SORTIE = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
 INTERVALLE  = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
 
+# ── Protection trading ────────────────────────────────────────────────────
+MAX_ACHATS_PAR_CYCLE  = 3       # Max nouveaux achats par cycle
+COOLDOWN_APRES_ACHAT  = 1800    # 30 min de cooldown après un achat
+SEUIL_CRYPTO_WEEKEND  = 70      # Score minimum crypto le weekend
+BARRES_CACHE_TTL      = 300     # Cache OHLC 5 min pour éviter les requêtes redondantes
+
+# Groupes d'actifs très corrélés — un seul acheté à la fois
+GROUPES_CORRELES = [
+    {"NVDA", "AMD"},
+    {"RIVN", "LCID", "NIO"},
+    {"BTC/USD", "ETH/USD", "COIN"},
+    {"UBER", "LYFT"},
+    {"GME", "AMC"},
+]
+
 
 # =============================================================================
 # [MODULE 2] AlpacaClientV2 — SDK officiel alpaca-trade-api
@@ -214,14 +229,15 @@ class AlpacaClientV2:
                 "ALPACA_API_KEY / ALPACA_SECRET_KEY manquants.\n"
                 "→ Définir dans GitHub Secrets ou variables d'environnement."
             )
-        # Initialisation du SDK officiel (exactement comme le code fourni)
         self.api = tradeapi.REST(
             ALPACA_API_KEY,
             ALPACA_SECRET_KEY,
             ALPACA_BASE_URL,
             api_version="v2",
         )
-        self.logger = logging.getLogger("Alpaca")
+        self.logger    = logging.getLogger("Alpaca")
+        self._cache_bars: dict    = {}
+        self._cache_bars_ts: dict = {}
 
     def get_compte(self) -> dict:
         """Retourne equity, cash, buying_power via le SDK."""
@@ -260,10 +276,12 @@ class AlpacaClientV2:
 
     def get_barres(self, ticker: str, limit: int = BARRES_LIMIT) -> pd.DataFrame:
         """
-        Récupère les barres horaires sous forme de DataFrame pandas.
+        Récupère les barres horaires. Cache 5 min pour éviter les requêtes redondantes.
         Utilise get_crypto_bars() pour BTC/ETH, get_bars() pour les actions.
-        Retourne un DataFrame avec colonnes : open, high, low, close, volume
         """
+        now = time.time()
+        if ticker in self._cache_bars and (now - self._cache_bars_ts.get(ticker, 0)) < BARRES_CACHE_TTL:
+            return self._cache_bars[ticker]
         try:
             end   = datetime.now(timezone.utc)
             start = end.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -291,6 +309,8 @@ class AlpacaClientV2:
             df.columns = [c.lower() for c in df.columns]
             df = df.sort_index()
             self.logger.info(f"Barres {ticker} : {len(df)} bougies reçues")
+            self._cache_bars[ticker]    = df
+            self._cache_bars_ts[ticker] = time.time()
             return df
 
         except Exception as e:
@@ -302,28 +322,42 @@ class AlpacaClientV2:
         """
         Soumet un ordre market notional (USD) via api.submit_order().
         Pour la crypto, utilise time_in_force='gtc' (identique au code fourni).
+        Retry 2× sur erreur réseau transitoire.
         """
         tif = "gtc" if "/" in ticker else "day"
-        # Alpaca notional : montant en USD, il calcule la quantité
-        ordre = self.api.submit_order(
-            symbol=ticker.replace("/", ""),  # BTC/USD → BTCUSD pour l'ordre
-            notional=str(round(montant_usd, 2)),
-            side=side,
-            type="market",
-            time_in_force=tif,
-        )
-        self.logger.info(f"Ordre {side.upper()} {ticker} ${montant_usd:.0f} → id={ordre.id}")
-        return ordre
+        sym = ticker.replace("/", "")  # BTC/USD → BTCUSD pour l'ordre Alpaca
+        for tentative in range(3):
+            try:
+                ordre = self.api.submit_order(
+                    symbol=sym,
+                    notional=str(round(montant_usd, 2)),
+                    side=side,
+                    type="market",
+                    time_in_force=tif,
+                )
+                self.logger.info(f"Ordre {side.upper()} {ticker} ${montant_usd:.0f} → id={ordre.id}")
+                return ordre
+            except Exception as e:
+                if tentative < 2:
+                    self.logger.warning(f"Ordre {ticker} tentative {tentative+1}/3: {e}")
+                    time.sleep(2 ** tentative)
+                else:
+                    raise
 
     def liquider_position(self, ticker: str) -> bool:
-        """Liquide intégralement la position via api.close_position()."""
-        try:
-            sym = ticker.replace("/", "")
-            self.api.close_position(sym)
-            return True
-        except Exception as e:
-            self.logger.error(f"Erreur liquidation {ticker} : {e}")
-            return False
+        """Liquide intégralement la position via api.close_position(). Retry 2×."""
+        sym = ticker.replace("/", "")
+        for tentative in range(3):
+            try:
+                self.api.close_position(sym)
+                return True
+            except Exception as e:
+                if tentative < 2:
+                    self.logger.warning(f"Liquidation {ticker} tentative {tentative+1}/3: {e}")
+                    time.sleep(2 ** tentative)
+                else:
+                    self.logger.error(f"Erreur liquidation {ticker} : {e}")
+                    return False
 
 
 # =============================================================================
@@ -838,6 +872,130 @@ class GestionnaireMomentum:
 
 
 
+# =============================================================================
+# [MODULE 4d] GestionnairePersistance — SQLite stdlib (aucune dépendance)
+# =============================================================================
+
+class GestionnairePersistance:
+    """
+    Persistance SQLite pour l'historique complet des trades.
+    Utilise sqlite3 (stdlib Python) — aucune dépendance supplémentaire.
+    Calcule win rate, avg P&L%, Sharpe approximatif.
+    """
+
+    DB_PATH = "data/trades.db"
+
+    def __init__(self):
+        self.logger = logging.getLogger("Persistance")
+        Path(self.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        self._init_db()
+
+    def _init_db(self):
+        with sqlite3.connect(self.DB_PATH) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS trades (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type           TEXT,
+                    ticker         TEXT,
+                    montant        REAL,
+                    prix           REAL,
+                    pnl            REAL,
+                    pnl_pct        REAL,
+                    conviction     TEXT,
+                    score_fusionne REAL,
+                    croisement_hma INTEGER DEFAULT 0,
+                    sentiment      REAL,
+                    rsi            REAL,
+                    raison         TEXT,
+                    timestamp      TEXT
+                )
+            """)
+            conn.commit()
+
+    def sauvegarder(self, trade: dict):
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.execute("""
+                    INSERT INTO trades
+                    (type,ticker,montant,prix,pnl,pnl_pct,conviction,
+                     score_fusionne,croisement_hma,sentiment,rsi,raison,timestamp)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    trade.get("type"),       trade.get("ticker"),
+                    trade.get("montant"),    trade.get("prix"),
+                    trade.get("pnl"),        trade.get("pnl_pct"),
+                    trade.get("conviction"), trade.get("score_fusionne"),
+                    1 if trade.get("croisement_hma") else 0,
+                    trade.get("sentiment"),  trade.get("rsi"),
+                    trade.get("raison"),     trade.get("timestamp"),
+                ))
+                conn.commit()
+        except Exception as e:
+            self.logger.warning(f"SQLite save: {e}")
+
+    def charger_recents(self, n: int = 500) -> list:
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    "SELECT * FROM trades ORDER BY id DESC LIMIT ?", (n,)
+                ).fetchall()
+                result = []
+                for r in reversed(rows):
+                    d = dict(r)
+                    d["croisement_hma"] = bool(d.get("croisement_hma"))
+                    result.append(d)
+                return result
+        except Exception as e:
+            self.logger.warning(f"SQLite load: {e}")
+            return []
+
+    def importer_json(self, trades: list):
+        """Migration one-shot JSON → SQLite au premier run."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                if conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0] > 0:
+                    return
+            for t in trades:
+                self.sauvegarder(t)
+            self.logger.info(f"Migration JSON→SQLite: {len(trades)} trades importés")
+        except Exception as e:
+            self.logger.warning(f"Migration: {e}")
+
+    def calculer_metriques(self) -> dict:
+        """Win rate, avg P&L%, best/worst trade, Sharpe approx."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                rows = conn.execute(
+                    "SELECT pnl, pnl_pct FROM trades "
+                    "WHERE type IN ('VENTE','VENTE_AUTO') AND pnl IS NOT NULL"
+                ).fetchall()
+            if not rows:
+                return {"win_rate": 0.0, "avg_pnl_pct": 0.0, "nb_trades": 0,
+                        "total_pnl": 0.0, "best_trade": 0.0, "worst_trade": 0.0,
+                        "sharpe_approx": 0.0}
+            pnls     = [r[0] for r in rows]
+            pnl_pcts = [r[1] for r in rows if r[1] is not None]
+            wins     = sum(1 for p in pnls if p > 0)
+            sharpe   = 0.0
+            if len(pnl_pcts) > 1:
+                mu  = statistics.mean(pnl_pcts)
+                std = statistics.stdev(pnl_pcts)
+                sharpe = round(mu / std, 3) if std else 0.0
+            return {
+                "win_rate":      round(wins / len(pnls) * 100, 1),
+                "avg_pnl_pct":   round(statistics.mean(pnl_pcts), 2) if pnl_pcts else 0.0,
+                "nb_trades":     len(pnls),
+                "total_pnl":     round(sum(pnls), 2),
+                "best_trade":    round(max(pnl_pcts), 2) if pnl_pcts else 0.0,
+                "worst_trade":   round(min(pnl_pcts), 2) if pnl_pcts else 0.0,
+                "sharpe_approx": sharpe,
+            }
+        except Exception as e:
+            self.logger.warning(f"Métriques: {e}")
+            return {}
+
+
 class GestionnaireRisque:
     """
     Stop-loss dynamique ATR + fixe 3%, take-profit ATR (ratio 1.5×),
@@ -1002,13 +1160,40 @@ class BotRoute:
         self.decision    = ScoreDecisionIA()
         self.discord     = NotificateurDiscord()
         self.momentum    = GestionnaireMomentum()
+        self.persistance = GestionnairePersistance()
         self.logger      = logging.getLogger("BotRoute")
         self.cycle       = 0
         self.historique_trades: list = self._charger_historique()
         self.historique_valeur: list = []
-        self.pause_drawdown = False
+        self.pause_drawdown    = False
         self.df_spy: pd.DataFrame = pd.DataFrame()
+        self._cooldown: dict   = {}   # ticker → timestamp fin de cooldown
+        self._achats_ce_cycle  = 0    # réinitialisé à chaque run_cycle
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        # Migration one-shot JSON → SQLite
+        self.persistance.importer_json(self.historique_trades)
+        # Charge les poids optimisés du run nocturne précédent
+        self._charger_poids_appris()
+
+    # ── Helpers protection trading ────────────────────────────────────────
+
+    def _en_cooldown(self, ticker: str) -> bool:
+        return time.time() < self._cooldown.get(ticker, 0)
+
+    def _definir_cooldown(self, ticker: str):
+        self._cooldown[ticker] = time.time() + COOLDOWN_APRES_ACHAT
+        self.logger.debug(f"Cooldown {ticker} : {COOLDOWN_APRES_ACHAT // 60} min")
+
+    def _actifs_correles(self, ticker: str, positions: dict) -> bool:
+        """Retourne True si un actif fortement corrélé est déjà en position."""
+        ticker_norm = ticker.replace("/", "")
+        for groupe in GROUPES_CORRELES:
+            if ticker in groupe or ticker_norm in groupe:
+                return any(
+                    t in positions or t.replace("/", "") in positions
+                    for t in groupe - {ticker, ticker_norm}
+                )
+        return False
 
     def _charger_historique(self) -> list:
         """Charge l'historique persistant depuis le fichier JSON."""
@@ -1031,6 +1216,348 @@ class BotRoute:
         except Exception as e:
             self.logger.warning(f"Erreur sauvegarde historique : {e}")
 
+    # ── Routines d'entraînement (marché fermé) ───────────────────────────
+
+    def _peut_executer_routine(self, nom_fichier: str, min_intervalle_h: float = 1.0) -> bool:
+        """Garde-fou : retourne True si la routine n'a pas tourné depuis min_intervalle_h heures."""
+        try:
+            path = DATA_DIR / nom_fichier
+            if not path.exists():
+                return True
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            ts_str = data.get("timestamp")
+            if not ts_str:
+                return True
+            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+            return age_h >= min_intervalle_h
+        except Exception:
+            return True
+
+    def _charger_poids_appris(self):
+        """Applique les poids optimisés du run nocturne si disponibles et valides."""
+        try:
+            poids_path = DATA_DIR / "poids_appris.json"
+            if not poids_path.exists():
+                return
+            with open(poids_path, encoding="utf-8") as f:
+                data = json.load(f)
+            poids = data.get("poids", {})
+            if (set(poids.keys()) == set(POIDS.keys()) and
+                    90 <= sum(poids.values()) <= 110):
+                POIDS.update(poids)
+                self.logger.info(f"📚 Poids appris chargés : {poids}")
+        except Exception as e:
+            self.logger.warning(f"Chargement poids appris : {e}")
+
+    def _optimiser_poids(self):
+        """
+        Analyse l'historique SQLite et ajuste les poids des indicateurs
+        en fonction de leur corrélation avec les trades gagnants.
+        Sauvegarde dans data/poids_appris.json.
+        """
+        logger = self.logger
+        try:
+            with sqlite3.connect(GestionnairePersistance.DB_PATH) as conn:
+                rows = conn.execute(
+                    "SELECT pnl_pct, croisement_hma, sentiment, rsi, score_fusionne "
+                    "FROM trades WHERE type IN ('VENTE','VENTE_AUTO') AND pnl_pct IS NOT NULL"
+                ).fetchall()
+
+            if len(rows) < 20:
+                logger.info(f"Optimisation poids : données insuffisantes ({len(rows)}/20 trades)")
+                return
+
+            trades = [
+                {"pnl_pct": r[0], "hma": r[1], "sent": r[2], "rsi": r[3], "score": r[4]}
+                for r in rows
+            ]
+            wr_global = sum(1 for t in trades if t["pnl_pct"] > 0) / len(trades)
+
+            # Win rate avec croisement HMA actif
+            hma_trades = [t for t in trades if t["hma"]]
+            wr_hma = (sum(1 for t in hma_trades if t["pnl_pct"] > 0) / len(hma_trades)
+                      if hma_trades else wr_global)
+
+            # Win rate avec RSI sain au moment de l'achat (30–60)
+            rsi_ok = [t for t in trades if t["rsi"] and 30 <= t["rsi"] <= 60]
+            wr_rsi = (sum(1 for t in rsi_ok if t["pnl_pct"] > 0) / len(rsi_ok)
+                      if rsi_ok else wr_global)
+
+            # Win rate avec sentiment élevé (>0.6)
+            sent_ok = [t for t in trades if t["sent"] and t["sent"] > 0.6]
+            wr_sent = (sum(1 for t in sent_ok if t["pnl_pct"] > 0) / len(sent_ok)
+                       if sent_ok else wr_global)
+
+            poids = dict(POIDS)
+            ratio_hma = wr_hma / wr_global if wr_global > 0 else 1.0
+            ratio_rsi = wr_rsi / wr_global if wr_global > 0 else 1.0
+
+            poids["hma_crossover"] = max(15, min(40, round(POIDS["hma_crossover"] * ratio_hma)))
+            poids["rsi"]           = max(5,  min(20, round(POIDS["rsi"]           * ratio_rsi)))
+
+            # Renormaliser à 100
+            total = sum(poids.values())
+            if total != 100:
+                factor = 100 / total
+                for k in poids:
+                    poids[k] = max(1, round(poids[k] * factor))
+                diff = 100 - sum(poids.values())
+                poids[max(poids, key=poids.get)] += diff
+
+            result = {
+                "timestamp":         datetime.now(timezone.utc).isoformat(),
+                "poids":             poids,
+                "nb_trades_analyses": len(trades),
+                "wr_global":         round(wr_global * 100, 1),
+                "wr_hma":            round(wr_hma   * 100, 1),
+                "wr_rsi":            round(wr_rsi   * 100, 1),
+                "wr_sent":           round(wr_sent  * 100, 1),
+            }
+            with open(DATA_DIR / "poids_appris.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+
+            POIDS.update(poids)
+            logger.info(
+                f"✅ Poids optimisés ({len(trades)} trades) "
+                f"WR global={wr_global*100:.0f}% HMA={wr_hma*100:.0f}% "
+                f"RSI={wr_rsi*100:.0f}% → {poids}"
+            )
+        except Exception as e:
+            logger.warning(f"Optimisation poids échouée : {e}")
+
+    def _mini_backtest(self):
+        """
+        Backtest léger sur 30 jours — 8 actifs représentatifs.
+        Rejoue la stratégie sur des barres historiques Alpaca (gratuit).
+        Sauvegarde les résultats dans data/backtest_results.json.
+        """
+        ACTIFS_TEST  = ["TSLA", "NVDA", "AMD", "AMZN", "META", "AAPL", "BTC/USD", "SPY"]
+        FENETRE_JOURS = 30
+        logger = self.logger
+        logger.info("🔬 Mini-backtest démarré…")
+
+        resultats_actifs = []
+        end       = datetime.now(timezone.utc)
+        start     = end - timedelta(days=FENETRE_JOURS)
+        start_str = start.strftime("%Y-%m-%d")
+        end_str   = end.strftime("%Y-%m-%d")
+
+        for ticker in ACTIFS_TEST:
+            try:
+                if "/" in ticker:
+                    df = self.alpaca.api.get_crypto_bars(
+                        ticker, TimeFrame.Hour, start=start_str, end=end_str
+                    ).df
+                else:
+                    df = self.alpaca.api.get_bars(
+                        ticker, TimeFrame.Hour, start=start_str, end=end_str,
+                        limit=1000, feed="iex"
+                    ).df
+
+                if df is None or df.empty or len(df) < 60:
+                    continue
+                df.columns = [c.lower() for c in df.columns]
+                df = df.sort_index()
+
+                trades_sim  = []
+                en_position = False
+                prix_entree = None
+
+                # Fenêtre glissante — step 5 pour la vitesse
+                for i in range(50, len(df), 5):
+                    slice_df = df.iloc[max(0, i - 120):i]
+                    if len(slice_df) < 50:
+                        continue
+                    tech = self.indicateurs.calculer(ticker, slice_df)
+                    prix = tech["prix"]
+                    if not prix:
+                        continue
+
+                    if not en_position and tech["signal"] == "BUY" and tech["score"] >= SEUIL_TECH_BUY:
+                        en_position = True
+                        prix_entree = prix
+                    elif en_position and prix_entree:
+                        pnl_pct = (prix - prix_entree) / prix_entree * 100
+                        if (pnl_pct <= -(STOP_LOSS_PCT * 100) or
+                                pnl_pct >= (TAKE_PROFIT_PCT * 100) or
+                                tech["signal"] == "SELL"):
+                            trades_sim.append(round(pnl_pct, 3))
+                            en_position = False
+                            prix_entree = None
+
+                if trades_sim:
+                    wr  = sum(1 for p in trades_sim if p > 0) / len(trades_sim) * 100
+                    avg = sum(trades_sim) / len(trades_sim)
+                    resultats_actifs.append({
+                        "ticker":        ticker,
+                        "nb_trades":     len(trades_sim),
+                        "win_rate":      round(wr, 1),
+                        "avg_pnl_pct":   round(avg, 2),
+                        "total_pnl_pct": round(sum(trades_sim), 2),
+                    })
+                    logger.info(f"  BT {ticker:8s}: {len(trades_sim)} trades WR={wr:.0f}% avg={avg:+.2f}%")
+
+            except Exception as e:
+                logger.warning(f"Backtest {ticker}: {e}")
+                continue
+
+        if resultats_actifs:
+            all_wrs  = [r["win_rate"]    for r in resultats_actifs]
+            all_avgs = [r["avg_pnl_pct"] for r in resultats_actifs]
+            result = {
+                "timestamp":       datetime.now(timezone.utc).isoformat(),
+                "fenetre_jours":   FENETRE_JOURS,
+                "nb_actifs":       len(resultats_actifs),
+                "win_rate_moyen":  round(sum(all_wrs)  / len(all_wrs),  1),
+                "avg_pnl_moyen":   round(sum(all_avgs) / len(all_avgs), 2),
+                "actifs":          resultats_actifs,
+            }
+            with open(DATA_DIR / "backtest_results.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            logger.info(
+                f"✅ Backtest terminé — {len(resultats_actifs)} actifs "
+                f"WR moyen={result['win_rate_moyen']:.1f}% "
+                f"avg P&L={result['avg_pnl_moyen']:+.2f}%"
+            )
+        else:
+            logger.warning("Backtest : aucun résultat produit")
+
+    def _prechauffer_groq(self):
+        """
+        Pré-appelle Groq pour tous les actifs 30 min avant l'ouverture NYSE.
+        Remplit le cache sentiment → premier cycle de trading sans latence Groq.
+        Sauvegarde un marqueur dans data/groq_warmup.json.
+        """
+        logger = self.logger
+        if not GROQ_API_KEY:
+            logger.info("Pré-chauffe Groq ignorée — GROQ_API_KEY absent")
+            return
+        logger.info("🔥 Pré-chauffe Groq démarrée…")
+
+        rechauffes = 0
+        for ticker in ACTIFS_TOUS:
+            try:
+                df = self.alpaca.get_barres(ticker)
+                if df.empty or len(df) < 50:
+                    continue
+                tech = self.indicateurs.calculer(ticker, df)
+                if tech["prix"]:
+                    self.sentiment.scorer(
+                        ticker, tech["prix"], tech["score"],
+                        tech["indicateurs"].get("rsi"),
+                        tech["indicateurs"].get("hma_signal"),
+                        tech["indicateurs"].get("atr_pct"),
+                    )
+                    rechauffes += 1
+                    time.sleep(0.4)  # Respect rate-limit Groq gratuit
+            except Exception as e:
+                logger.warning(f"Pré-chauffe {ticker}: {e}")
+
+        with open(DATA_DIR / "groq_warmup.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "nb_rechauffes": rechauffes,
+            }, f)
+        logger.info(f"✅ Pré-chauffe Groq terminée — {rechauffes}/{len(ACTIFS_TOUS)} actifs")
+
+    def _mettre_a_jour_correlations(self):
+        """
+        Calcule la matrice de corrélation réelle (Alpaca, 30 derniers jours).
+        Détecte automatiquement les paires ≥ 0.85 et met à jour GROUPES_CORRELES.
+        Sauvegarde dans data/correlations.json.
+        """
+        global GROUPES_CORRELES
+        SEUIL_CORR    = 0.85
+        ACTIFS_CORR   = ACTIFS_ACTIONS[:20]  # 20 actions — volume raisonnable
+        FENETRE_JOURS = 30
+        logger = self.logger
+        logger.info("📊 Mise à jour corrélations démarrée…")
+
+        try:
+            end       = datetime.now(timezone.utc)
+            start_str = (end - timedelta(days=FENETRE_JOURS)).strftime("%Y-%m-%d")
+            end_str   = end.strftime("%Y-%m-%d")
+
+            returns = {}
+            for ticker in ACTIFS_CORR:
+                try:
+                    df = self.alpaca.get_barres(ticker)
+                    if df.empty or len(df) < 20:
+                        continue
+                    ret = df["close"].pct_change().dropna()
+                    returns[ticker] = ret
+                    time.sleep(0.1)
+                except Exception as e:
+                    logger.warning(f"Corrélation {ticker}: {e}")
+
+            if len(returns) < 5:
+                logger.warning("Corrélations : données insuffisantes (<5 actifs)")
+                return
+
+            df_ret   = pd.DataFrame(returns).dropna(how="all")
+            corr_mat = df_ret.corr()
+            tickers  = list(corr_mat.columns)
+
+            groupes_detectes = []
+            traites          = set()
+            for i, t1 in enumerate(tickers):
+                if t1 in traites:
+                    continue
+                groupe = {t1}
+                for t2 in tickers[i + 1:]:
+                    if t2 in traites:
+                        continue
+                    try:
+                        v = corr_mat.loc[t1, t2]
+                        if pd.notna(v) and float(v) >= SEUIL_CORR:
+                            groupe.add(t2)
+                    except Exception:
+                        pass
+                if len(groupe) > 1:
+                    groupes_detectes.append(groupe)
+                    traites.update(groupe)
+
+            # Conserver les groupes crypto (non calculés sur actions)
+            groupes_crypto  = [g for g in GROUPES_CORRELES if any("/" in t for t in g)]
+            nouveaux_groupes = groupes_detectes + groupes_crypto
+
+            if nouveaux_groupes:
+                GROUPES_CORRELES = nouveaux_groupes
+
+            # Top 10 corrélations
+            pairs = []
+            for i, t1 in enumerate(tickers):
+                for t2 in tickers[i + 1:]:
+                    try:
+                        v = float(corr_mat.loc[t1, t2])
+                        if pd.notna(v):
+                            pairs.append((t1, t2, round(v, 3)))
+                    except Exception:
+                        pass
+            pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+
+            result = {
+                "timestamp":        datetime.now(timezone.utc).isoformat(),
+                "seuil_corr":       SEUIL_CORR,
+                "nb_actifs":        len(returns),
+                "nb_groupes":       len(groupes_detectes),
+                "groupes":          [sorted(list(g)) for g in nouveaux_groupes],
+                "top_correlations": [{"t1": p[0], "t2": p[1], "corr": p[2]} for p in pairs[:10]],
+            }
+            with open(DATA_DIR / "correlations.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+
+            logger.info(
+                f"✅ Corrélations mises à jour — {len(groupes_detectes)} groupes détectés "
+                f"sur {len(returns)} actifs | seuil={SEUIL_CORR}"
+            )
+        except Exception as e:
+            logger.warning(f"Mise à jour corrélations échouée : {e}")
+
     def _auditer_positions(self, positions: dict):
         for ticker, pos in list(positions.items()):
             raison = None
@@ -1042,14 +1569,19 @@ class BotRoute:
                 raison = "TRAILING-STOP"
             if raison:
                 if self.alpaca.liquider_position(ticker):
-                    self.historique_trades.append({
+                    trade = {
                         "type": "VENTE_AUTO", "ticker": ticker,
                         "prix": pos["current_price"],
                         "pnl": round(pos["unrealized_pl"], 2),
                         "pnl_pct": round(pos["unrealized_plpc"], 2),
                         "raison": raison,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
+                    }
+                    self.historique_trades.append(trade)
+                    self.persistance.sauvegarder(trade)
+                    # Cooldown après stop-loss pour éviter de re-rentrer immédiatement
+                    if "STOP-LOSS" in raison:
+                        self._definir_cooldown(ticker)
                     self.logger.info(f"[AUTO] {ticker} — {raison}")
 
     def _analyser_actif(self, ticker: str, positions: dict, compte: dict, executer: bool = True) -> dict:
@@ -1064,6 +1596,10 @@ class BotRoute:
             "raison": "",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+        # Normalisation symbole — Alpaca retourne BTCUSD mais nos actifs sont BTC/USD
+        ticker_norm   = ticker.replace("/", "")
+        dans_position = ticker in positions or ticker_norm in positions
 
         # ── 1. Données OHLC via SDK Alpaca ────────────────────────────────
         df = self.alpaca.get_barres(ticker)
@@ -1088,12 +1624,17 @@ class BotRoute:
             mom = self.momentum.score_vs_spy(ticker, df, self.df_spy)
             base["momentum_spy"] = mom
 
-        # ── 3. Sentiment Groq (si signal pertinent) ────────────────────
+        # ── 3. Sentiment Groq — uniquement si signal fort ou position ouverte
         sent = {"score": 0.55, "resume": "Non analysé",
                 "biais": "neutre", "facteurs_positifs": [],
                 "facteurs_negatifs": [], "source": "skip"}
 
-        if tech["signal"] in ("BUY", "SELL") or ticker in positions:
+        should_analyze_groq = (
+            (tech["signal"] == "BUY"  and tech["score"] >= SEUIL_CONVICTION_FAIBLE) or
+            tech["signal"] == "SELL" or
+            dans_position
+        )
+        if should_analyze_groq:
             sent = self.sentiment.scorer(
                 ticker, tech["prix"] or 0,
                 tech["score"],
@@ -1109,7 +1650,7 @@ class BotRoute:
         base["facteurs_negatifs"]  = sent.get("facteurs_negatifs", [])
 
         # ── 4. Décision fusionnée ─────────────────────────────────────────
-        dec = self.decision.decider(tech, sent, ticker in positions)
+        dec = self.decision.decider(tech, sent, dans_position)
         base.update({
             "score_fusionne": dec["score_fusionne"],
             "conviction":     dec["conviction"],
@@ -1118,14 +1659,25 @@ class BotRoute:
 
         # ── 5. Exécution ──────────────────────────────────────────────────
         if not executer:
-            # Marché fermé — on prépare la stratégie sans exécuter
             if dec["action"] == "ACHAT":
                 base["raison"] = f"📋 Ordre préparé (marché fermé) — {dec['raison']}"
                 base["action_executee"] = "PRÉPARE"
             return base
 
         if dec["action"] == "ACHAT" and not self.pause_drawdown:
-            if not self.risque.secteur_ok(ticker, positions):
+            # ── Garde-fous ordonnés par priorité ─────────────────────────
+            if dans_position:
+                base["raison"] = "Position déjà ouverte — achat ignoré"
+            elif self._en_cooldown(ticker):
+                reste = int(self._cooldown[ticker] - time.time())
+                base["raison"] = f"Cooldown actif — {reste // 60}min {reste % 60}s restants"
+            elif self._achats_ce_cycle >= MAX_ACHATS_PAR_CYCLE:
+                base["raison"] = f"Limite {MAX_ACHATS_PAR_CYCLE} achats/cycle atteinte"
+            elif self._actifs_correles(ticker, positions):
+                base["raison"] = "Actif corrélé déjà en position"
+            elif "/" in ticker and datetime.now(timezone.utc).weekday() >= 5 and tech["score"] < SEUIL_CRYPTO_WEEKEND:
+                base["raison"] = f"Mode weekend crypto — score {tech['score']:.0f} < {SEUIL_CRYPTO_WEEKEND}"
+            elif not self.risque.secteur_ok(ticker, positions):
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
             else:
                 montant = self.risque.allocation(
@@ -1136,7 +1688,7 @@ class BotRoute:
                     try:
                         self.alpaca.soumettre_ordre(ticker, montant, "buy")
                         base["action_executee"] = "ACHAT"
-                        self.historique_trades.append({
+                        trade = {
                             "type": "ACHAT", "ticker": ticker,
                             "montant": montant, "prix": tech["prix"],
                             "conviction": dec["conviction"],
@@ -1145,7 +1697,11 @@ class BotRoute:
                             "sentiment": sent["score"],
                             "rsi": tech["indicateurs"].get("rsi"),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                        })
+                        }
+                        self.historique_trades.append(trade)
+                        self.persistance.sauvegarder(trade)
+                        self._definir_cooldown(ticker)
+                        self._achats_ce_cycle += 1
                         self._sauvegarder_historique()
                         self.discord.notifier_achat(
                             ticker, montant, tech["prix"],
@@ -1159,18 +1715,21 @@ class BotRoute:
                     except Exception as e:
                         base["raison"] = f"Erreur ordre : {e}"
 
-        elif dec["action"] == "VENTE" and ticker in positions:
-            pos = positions[ticker]
+        elif dec["action"] == "VENTE" and dans_position:
+            # Récupère la position avec normalisation du symbole
+            pos = positions.get(ticker) or positions.get(ticker_norm, {})
             if self.alpaca.liquider_position(ticker):
                 base["action_executee"] = "VENTE"
-                self.historique_trades.append({
+                trade = {
                     "type": "VENTE", "ticker": ticker,
                     "prix": tech["prix"],
                     "pnl": round(pos.get("unrealized_pl", 0), 2),
                     "pnl_pct": round(pos.get("unrealized_plpc", 0), 2),
                     "sentiment": sent["score"],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
+                }
+                self.historique_trades.append(trade)
+                self.persistance.sauvegarder(trade)
                 self._sauvegarder_historique()
                 self.discord.notifier_vente(
                     ticker,
@@ -1188,6 +1747,7 @@ class BotRoute:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
+        self._achats_ce_cycle = 0   # reset compteur achats par cycle
         marche_ouvert = self.alpaca.marche_ouvert()
         if marche_ouvert:
             self.logger.info("🟢 Marché OUVERT — mode trading actif")
@@ -1203,6 +1763,13 @@ class BotRoute:
                     "portefeuille": {}, "decisions_cycle": []}
 
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
+        # Alerte Discord préventive à 3% de drawdown (avant la pause à 5%)
+        dd_pct = max(0.0, (self.risque.capital_initial - compte["equity"]) / self.risque.capital_initial * 100)
+        if 3.0 <= dd_pct < 5.0:
+            self.discord._envoyer(
+                f"⚠️ **ROUTE/v4 — Alerte drawdown** : {dd_pct:.2f}% "
+                f"(limite pause : 5%) | Equity : ${compte['equity']:,.2f}"
+            )
         if marche_ouvert:
             self._auditer_positions(positions)
 
@@ -1214,6 +1781,29 @@ class BotRoute:
             time.sleep(0.05)
             d = self._analyser_actif(ticker, positions, compte, executer=marche_ouvert)
             decisions.append(d)
+
+        # ── Routines d'entraînement nocturnes ────────────────────────────────
+        if not marche_ouvert:
+            now_utc = datetime.now(timezone.utc)
+            heure   = now_utc.hour
+            minute  = now_utc.minute
+            wday    = now_utc.weekday()   # 0=Lun … 5=Sam, 6=Dim
+
+            # Optimisation des poids — toutes les heures la nuit (UTC 20h–12h)
+            if (heure >= 20 or heure < 12) and self._peut_executer_routine("poids_appris.json", 1.0):
+                self._optimiser_poids()
+
+            # Mini-backtest — une fois par nuit à 3h UTC (max 1× / 23h)
+            if heure == 3 and self._peut_executer_routine("backtest_results.json", 23.0):
+                self._mini_backtest()
+
+            # Pré-chauffe Groq — 30 min avant NYSE open (13:00–13:30 UTC = 09:00–09:30 NY)
+            if heure == 13 and minute < 30 and self._peut_executer_routine("groq_warmup.json", 6.0):
+                self._prechauffer_groq()
+
+            # Corrélations dynamiques — weekend uniquement, max 1× / 12h
+            if wday >= 5 and self._peut_executer_routine("correlations.json", 12.0):
+                self._mettre_a_jour_correlations()
 
         self.historique_valeur.append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1249,11 +1839,17 @@ class BotRoute:
                 len(positions_apres), achats, ventes
             )
 
+        # Métriques de performance depuis SQLite
+        metriques = self.persistance.calculer_metriques()
+
+        # Trades récents depuis SQLite (plus fiable que la liste mémoire)
+        trades_recents = self.persistance.charger_recents(500)
+
         return {
             "meta": {
                 "cycle":           self.cycle,
                 "timestamp":       datetime.now(timezone.utc).isoformat(),
-                "bot_version":     "4.0.0-route",
+                "bot_version":     "4.1.0-route",
                 "broker":          "Alpaca Trade API v2",
                 "mode":            "PAPER",
                 "sentiment_engine":"Groq Cloud llama-3.3-70b",
@@ -1269,11 +1865,12 @@ class BotRoute:
                 "pnl_total_pct":     round(pnl_pct, 2),
                 "positions":         positions_apres,
                 "nb_positions":      len(positions_apres),
-                "historique_trades": self.historique_trades[-60:],   # 60 derniers pour le dashboard
-                "historique_trades_complet": len(self.historique_trades),  # Compte total
+                "historique_trades": trades_recents[-60:],       # 60 derniers pour dashboard
+                "historique_trades_complet": len(trades_recents),
                 "historique_valeur": self.historique_valeur,
             },
             "decisions_cycle": decisions,
+            "metriques": metriques,
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
                 "take_profit_pct":    TAKE_PROFIT_PCT * 100,
