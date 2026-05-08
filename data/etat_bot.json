@@ -1,7 +1,7 @@
 {
   "meta": {
     "cycle": 10,
-    "timestamp": "2026-05-08T09:36:05.077094+00:00",
+    "timestamp": "2026-05-08T09:51:12.794087+00:00",
     "bot_version": "4.0.0-route",
     "broker": "Alpaca Trade API v2",
     "mode": "PAPER",
@@ -10,31 +10,31 @@
   },
   "portefeuille": {
     "capital_initial": 100000.0,
-    "equity": 99105.68,
+    "equity": 99099.32,
     "cash": 87069.29,
     "buying_power": 379073.64,
-    "pnl_total": -894.32,
-    "pnl_total_pct": -0.89,
+    "pnl_total": -900.68,
+    "pnl_total_pct": -0.9,
     "positions": {
       "AMD": {
         "ticker": "AMD",
         "qty": 2.466273707,
         "avg_entry_price": 412.211034,
-        "current_price": 415.0,
-        "market_value": 1023.503588,
-        "unrealized_pl": 6.878353,
-        "unrealized_plpc": 0.677,
-        "highest_price": 415.0
+        "current_price": 414.0,
+        "market_value": 1021.037315,
+        "unrealized_pl": 4.41208,
+        "unrealized_plpc": 0.434,
+        "highest_price": 414.0
       },
       "AMZN": {
         "ticker": "AMZN",
         "qty": 29.477129639,
         "avg_entry_price": 271.396846,
-        "current_price": 272.0,
-        "market_value": 8017.779262,
-        "unrealized_pl": 17.779249,
-        "unrealized_plpc": 0.22200000000000003,
-        "highest_price": 272.0
+        "current_price": 271.89,
+        "market_value": 8014.536778,
+        "unrealized_pl": 14.536765,
+        "unrealized_plpc": 0.182,
+        "highest_price": 271.89
       },
       "NIO": {
         "ticker": "NIO",
@@ -50,74 +50,74 @@
         "ticker": "QQQ",
         "qty": 1.439171958,
         "avg_entry_price": 694.844,
-        "current_price": 699.5,
-        "market_value": 1006.700785,
-        "unrealized_pl": 6.700785,
-        "unrealized_plpc": 0.67,
-        "highest_price": 699.5
+        "current_price": 698.92,
+        "market_value": 1005.866065,
+        "unrealized_pl": 5.866065,
+        "unrealized_plpc": 0.587,
+        "highest_price": 698.92
       },
       "UBER": {
         "ticker": "UBER",
         "qty": 13.005592404,
         "avg_entry_price": 76.89,
-        "current_price": 77.15,
-        "market_value": 1003.381454,
-        "unrealized_pl": 3.381454,
-        "unrealized_plpc": 0.338,
-        "highest_price": 77.15
+        "current_price": 77.17,
+        "market_value": 1003.641566,
+        "unrealized_pl": 3.641566,
+        "unrealized_plpc": 0.364,
+        "highest_price": 77.17
       }
     },
     "nb_positions": 5,
     "historique_trades": [],
     "historique_valeur": [
       {
-        "timestamp": "2026-05-08T09:34:12.192637+00:00",
-        "equity": 99105.92,
+        "timestamp": "2026-05-08T09:49:11.776147+00:00",
+        "equity": 99101.82,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:34:24.698862+00:00",
-        "equity": 99103.6,
+        "timestamp": "2026-05-08T09:49:25.168632+00:00",
+        "equity": 99101.82,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:34:37.217087+00:00",
-        "equity": 99105.96,
+        "timestamp": "2026-05-08T09:49:38.617511+00:00",
+        "equity": 99101.89,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:34:49.726083+00:00",
-        "equity": 99105.95,
+        "timestamp": "2026-05-08T09:49:52.058579+00:00",
+        "equity": 99101.81,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:35:02.388637+00:00",
-        "equity": 99106.0,
+        "timestamp": "2026-05-08T09:50:05.564418+00:00",
+        "equity": 99101.81,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:35:14.898336+00:00",
-        "equity": 99105.93,
+        "timestamp": "2026-05-08T09:50:19.056749+00:00",
+        "equity": 99101.81,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:35:27.427309+00:00",
-        "equity": 99106.42,
+        "timestamp": "2026-05-08T09:50:32.452685+00:00",
+        "equity": 99100.54,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:35:39.947091+00:00",
-        "equity": 99106.42,
+        "timestamp": "2026-05-08T09:50:45.911249+00:00",
+        "equity": 99100.18,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:35:52.528114+00:00",
-        "equity": 99106.17,
+        "timestamp": "2026-05-08T09:50:59.382774+00:00",
+        "equity": 99099.22,
         "cash": 87069.29
       },
       {
-        "timestamp": "2026-05-08T09:36:05.052478+00:00",
-        "equity": 99105.68,
+        "timestamp": "2026-05-08T09:51:12.765049+00:00",
+        "equity": 99099.32,
         "cash": 87069.29
       }
     ]
@@ -138,7 +138,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:02.657313+00:00"
+      "timestamp": "2026-05-08T09:51:09.521980+00:00"
     },
     {
       "ticker": "NVDA",
@@ -155,7 +155,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:02.732951+00:00"
+      "timestamp": "2026-05-08T09:51:09.623247+00:00"
     },
     {
       "ticker": "AMD",
@@ -172,7 +172,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:02.808851+00:00"
+      "timestamp": "2026-05-08T09:51:09.723429+00:00"
     },
     {
       "ticker": "AMZN",
@@ -189,7 +189,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:02.886240+00:00"
+      "timestamp": "2026-05-08T09:51:09.823190+00:00"
     },
     {
       "ticker": "NFLX",
@@ -206,7 +206,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:02.961526+00:00"
+      "timestamp": "2026-05-08T09:51:09.926918+00:00"
     },
     {
       "ticker": "META",
@@ -223,7 +223,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.036621+00:00"
+      "timestamp": "2026-05-08T09:51:10.026909+00:00"
     },
     {
       "ticker": "AAPL",
@@ -240,7 +240,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.113132+00:00"
+      "timestamp": "2026-05-08T09:51:10.126310+00:00"
     },
     {
       "ticker": "MSFT",
@@ -257,7 +257,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.190521+00:00"
+      "timestamp": "2026-05-08T09:51:10.227177+00:00"
     },
     {
       "ticker": "GOOGL",
@@ -274,7 +274,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.265882+00:00"
+      "timestamp": "2026-05-08T09:51:10.341061+00:00"
     },
     {
       "ticker": "INTC",
@@ -291,7 +291,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.340566+00:00"
+      "timestamp": "2026-05-08T09:51:10.441431+00:00"
     },
     {
       "ticker": "COIN",
@@ -308,7 +308,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.415861+00:00"
+      "timestamp": "2026-05-08T09:51:10.543623+00:00"
     },
     {
       "ticker": "SOFI",
@@ -325,7 +325,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.492027+00:00"
+      "timestamp": "2026-05-08T09:51:10.643490+00:00"
     },
     {
       "ticker": "PLTR",
@@ -342,7 +342,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.566599+00:00"
+      "timestamp": "2026-05-08T09:51:10.744339+00:00"
     },
     {
       "ticker": "RIVN",
@@ -359,7 +359,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.641456+00:00"
+      "timestamp": "2026-05-08T09:51:10.847052+00:00"
     },
     {
       "ticker": "LCID",
@@ -376,7 +376,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.715261+00:00"
+      "timestamp": "2026-05-08T09:51:10.949256+00:00"
     },
     {
       "ticker": "NIO",
@@ -393,7 +393,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.792835+00:00"
+      "timestamp": "2026-05-08T09:51:11.049545+00:00"
     },
     {
       "ticker": "UBER",
@@ -410,7 +410,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.867391+00:00"
+      "timestamp": "2026-05-08T09:51:11.158351+00:00"
     },
     {
       "ticker": "LYFT",
@@ -427,7 +427,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:03.947104+00:00"
+      "timestamp": "2026-05-08T09:51:11.261348+00:00"
     },
     {
       "ticker": "SNAP",
@@ -444,7 +444,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.020779+00:00"
+      "timestamp": "2026-05-08T09:51:11.362242+00:00"
     },
     {
       "ticker": "RBLX",
@@ -461,7 +461,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.097018+00:00"
+      "timestamp": "2026-05-08T09:51:11.464876+00:00"
     },
     {
       "ticker": "HOOD",
@@ -478,7 +478,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.182022+00:00"
+      "timestamp": "2026-05-08T09:51:11.569336+00:00"
     },
     {
       "ticker": "DKNG",
@@ -495,7 +495,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.257879+00:00"
+      "timestamp": "2026-05-08T09:51:11.669963+00:00"
     },
     {
       "ticker": "PENN",
@@ -512,7 +512,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.333342+00:00"
+      "timestamp": "2026-05-08T09:51:11.770146+00:00"
     },
     {
       "ticker": "GME",
@@ -529,7 +529,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.406996+00:00"
+      "timestamp": "2026-05-08T09:51:11.870752+00:00"
     },
     {
       "ticker": "AMC",
@@ -546,7 +546,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.491658+00:00"
+      "timestamp": "2026-05-08T09:51:11.972159+00:00"
     },
     {
       "ticker": "SPY",
@@ -563,7 +563,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.566564+00:00"
+      "timestamp": "2026-05-08T09:51:12.076470+00:00"
     },
     {
       "ticker": "QQQ",
@@ -580,7 +580,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.647872+00:00"
+      "timestamp": "2026-05-08T09:51:12.178956+00:00"
     },
     {
       "ticker": "KO",
@@ -597,7 +597,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.724593+00:00"
+      "timestamp": "2026-05-08T09:51:12.279719+00:00"
     },
     {
       "ticker": "DAL",
@@ -614,7 +614,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.798686+00:00"
+      "timestamp": "2026-05-08T09:51:12.380934+00:00"
     },
     {
       "ticker": "BA",
@@ -631,7 +631,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.872609+00:00"
+      "timestamp": "2026-05-08T09:51:12.484656+00:00"
     },
     {
       "ticker": "BTC/USD",
@@ -648,7 +648,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:04.948745+00:00"
+      "timestamp": "2026-05-08T09:51:12.585350+00:00"
     },
     {
       "ticker": "ETH/USD",
@@ -665,7 +665,7 @@
       "atr_pct": null,
       "indicateurs": {},
       "raison": "Données OHLC insuffisantes",
-      "timestamp": "2026-05-08T09:36:05.027522+00:00"
+      "timestamp": "2026-05-08T09:51:12.713209+00:00"
     }
   ],
   "config": {
