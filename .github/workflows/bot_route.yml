@@ -247,6 +247,7 @@ jobs:
           " 2>/dev/null)
           TS=$(date -u '+%Y-%m-%d %H:%M UTC')
           git commit -m "📈 Route v4 — cycle #${CYCLE} — ${TS}"
+          git pull --rebase origin main || git pull --rebase origin master || true
           git push
           echo "✅ Données committées (cycle #${CYCLE})"
         fi
