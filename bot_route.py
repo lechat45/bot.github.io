@@ -133,7 +133,7 @@ BB_STD              = 2.0
 ADX_PERIODE         = 14
 ADX_SEUIL           = 25
 VOLUME_MULT         = 1.5
-BARRES_LIMIT        = 300   # Bougies 1h récupérées (besoin EMA100 + marge)
+BARRES_LIMIT        = 150   # Bougies 1h récupérées (EMA100 + marge suffisante)
 
 # ── Pondération score composite (total = 100) ────────────────────────────
 POIDS = {
@@ -341,7 +341,7 @@ class MoteurIndicateurs:
         }
 
         # Minimum de barres pour calculer EMA100 + marge
-        if len(df) < BARRES_LIMIT // 2:
+        if len(df) < 110:
             return result
 
         closes  = df["close"]
@@ -599,7 +599,7 @@ class AnalyseurSentimentGroq:
 
     GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
     MODELE    = "llama-3.3-70b-versatile"
-    CACHE_TTL = 180   # 3 minutes
+    CACHE_TTL = 600   # 10 minutes — évite les appels répétés
 
     def __init__(self):
         self.logger    = logging.getLogger("Groq")
@@ -677,7 +677,7 @@ JSON uniquement, sans texte autour :
                         {"role": "user", "content": prompt},
                     ],
                 },
-                timeout=20,
+                timeout=8,
             )
             r.raise_for_status()
             texte = r.json()["choices"][0]["message"]["content"].strip()
@@ -1030,7 +1030,7 @@ class BotRoute:
 
         decisions = []
         for ticker in ACTIFS_TOUS:
-            time.sleep(0.3)
+            time.sleep(0.05)
             d = self._analyser_actif(ticker, positions, compte)
             decisions.append(d)
 
