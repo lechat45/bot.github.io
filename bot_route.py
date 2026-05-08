@@ -1,907 +1,1125 @@
 """
 =============================================================================
-bot_route.py — Bot de trading "Route" inspiré de l'analyse Aywen/Gemini
+bot_route.py — Bot "Route" v4
+Alpaca Trade API + pandas-ta (HMA/EMA/RSI/MACD/BB/ADX) + Groq Cloud Sentiment
 =============================================================================
 
 MODULES & RÔLES :
 
   [MODULE 1] Configuration & Constantes
-      → Toute la configuration en un seul endroit : actifs, seuils SMA/RSI,
-        règles de money management (stop-loss 3%, allocation par position)
-      → Les clés API sont lues EXCLUSIVEMENT depuis les variables d'environnement
-      → Rôle : centre de contrôle — modifier une valeur ici change tout le comportement
+      → Tous les paramètres en un seul endroit : actifs, indicateurs, risque
+      → Clés API lues EXCLUSIVEMENT depuis variables d'environnement
+      → NOUVEAU : HMA (Hull Moving Average) ajouté — plus réactif que SMA/EMA
+      → NOUVEAU : pandas-ta gère tous les calculs d'indicateurs (plus fiable)
+      → Rôle : centre de contrôle — modifier ici change tout le comportement
 
-  [MODULE 2] AlpacaClient
-      → Wrapper autour de l'API REST Alpaca Paper Trading
-      → Fonctions : récupérer les barres OHLC, soumettre des ordres market,
-        lire les positions ouvertes et le solde du compte
-      → Rôle : unique point de contact avec le broker — tout ordre passe ici
+  [MODULE 2] AlpacaClientV2
+      → Utilise alpaca-trade-api (SDK officiel) au lieu de requests bruts
+      → Récupère les barres OHLC via api.get_bars() → DataFrame pandas
+      → Soumet les ordres via api.submit_order() (identique au code fourni)
+      → Supporte actions ET crypto (BTC/USD, ETH/USD...)
+      → Rôle : interface broker officielle — plus stable et maintenable
 
-  [MODULE 3] MoteurTechnique
-      → Calcule SMA court terme (5 min) et long terme (3h) sur les données OHLC
-      → Calcule le RSI(14) pour détecter sur-achat / sur-vente
-      → Génère un signal : BUY / SELL / HOLD avec justification textuelle
-      → Rôle : cerveau mathématique du bot — logique pure sans émotion
+  [MODULE 3] MoteurIndicateurs (NOUVEAU — pandas-ta)
+      → HMA(10)    : Hull MA — détecte les croisements rapides de tendance
+      → EMA(100)   : tendance de fond longue (inspiré du code fourni)
+      → EMA(9/21)  : croisement court terme
+      → MACD(12,26,9) : momentum et divergences
+      → RSI(14)    : sur-achat/sur-vente avec zones étendues
+      → Bollinger Bands(20,2) : squeeze et breakouts
+      → ADX(14)    : force de tendance directionnelle
+      → Volume SMA : confirmation par pic de volume
+      → Score composite 0–100 pondéré
+      → Rôle : cerveau mathématique — pandas-ta calcule tout en vectoriel
 
-  [MODULE 4] AnalyseurSentiment
-      → Appelle l'API Claude (Anthropic) pour scorer le sentiment de marché
-      → Simule un flux de "news/tweets" fictif horodaté sur l'actif analysé
-      → Retourne un score 0.0–1.0 : <0.5 = pessimiste, >0.5 = optimiste
-      → Rôle : filtre émotionnel — bloque les achats en période de panique
+  [MODULE 4] AnalyseurSentimentGroq (NOUVEAU — Groq Cloud)
+      → Remplace Grok xAI par Groq Cloud (groq.com/console)
+      → Endpoint : https://api.groq.com/openai/v1/chat/completions
+      → Modèle : llama-3.3-70b-versatile (rapide, gratuit, précis)
+      → Prompt enrichi : contexte macro + données techniques + secteur
+      → Retourne score 0.0–1.0 + résumé + facteurs + biais court terme
+      → Cache 3 minutes par actif pour limiter les appels
+      → Rôle : filtre émotionnel IA — "variable émotion" Aywen via Groq
 
   [MODULE 5] GestionnaireRisque
-      → Applique les règles de money management strictes (inspiré analyse Gemini) :
-          • Stop-loss automatique à 3% sous le prix d'achat
-          • Take-profit à 4.5% (ratio gain/perte = 1.5×)
-          • Maximum 5 positions simultanées (1 000 € chacune sur 5 000 € capital)
-          • Drawdown max 5% du portefeuille total avant pause forcée
-      → Rôle : gardien du capital — la survie avant la performance
+      → Stop-loss dynamique ATR (1.8×) + fixe 3% de secours
+      → Take-profit adaptatif ATR (2.7×) → ratio 1.5×
+      → Trailing stop −2.5% depuis le plus haut (protège les gains)
+      → Drawdown max 5% → pause forcée
+      → Sizing adaptatif : 700$/1000$/1200$ selon conviction
+      → Contrôle sectoriel : max 2 positions par secteur
+      → Rôle : gardien du capital
 
-  [MODULE 6] BotRoute
-      → Orchestre tous les modules : données → technique → sentiment → risque → ordre
-      → Décision finale : BUY validé seulement si signal technique ET sentiment > 0.5
-      → Journalise chaque décision dans data/etat_bot.json pour le dashboard HTML
-      → Rôle : chef d'orchestre — assemble toutes les pièces en un cycle cohérent
+  [MODULE 6] ScoreDecisionIA
+      → Fusionne score technique (60%) + sentiment Groq (40%)
+      → Matrice 9 combinaisons : technique × sentiment
+      → Conviction FORTE/MOYENNE/FAIBLE → taille de position variable
+      → Rôle : décision finale arbitrée entre logique et émotion
 
-  [MODULE 7] Point d'entrée
-      → Boucle infinie avec intervalle configurable (BOT_INTERVAL_SEC)
-      → Gestion propre des signaux SIGINT/SIGTERM pour arrêt sans ordre orphelin
-      → Rôle : moteur d'exécution continu compatible GitHub Actions
+  [MODULE 7] BotRoute
+      → Orchestre tous les modules en pipeline séquentiel
+      → Détecte les croisements HMA comme signal prioritaire (code fourni)
+      → Exporte vers data/etat_bot.json pour le dashboard
+      → Rôle : chef d'orchestre du cycle de trading
+
+  [MODULE 8] Point d'entrée
+      → Boucle infinie SIGINT/SIGTERM-safe
+      → Compatible GitHub Actions (4 min run / 5 min cron)
+      → Rôle : moteur d'exécution continu
 
 =============================================================================
-SÉCURITÉ — Variables d'environnement requises (GitHub Secrets) :
-  ALPACA_API_KEY        → Clé API Alpaca (régénère-la sur app.alpaca.markets !)
-  ALPACA_SECRET_KEY     → Secret Alpaca
-  ALPACA_BASE_URL       → https://paper-api.alpaca.markets  (paper trading)
-  ANTHROPIC_API_KEY     → Clé Anthropic pour l'analyse de sentiment
+VARIABLES D'ENVIRONNEMENT REQUISES (GitHub Secrets) :
+  ALPACA_API_KEY        → app.alpaca.markets → API Keys
+  ALPACA_SECRET_KEY     → app.alpaca.markets → API Keys
+  ALPACA_BASE_URL       → https://paper-api.alpaca.markets (paper)
+  GROQ_API_KEY          → console.groq.com → API Keys (gratuit)
 =============================================================================
 """
 
-# ── Imports stdlib ──────────────────────────────────────────────────────────
-import json
-import time
-import os
-import signal
-import sys
-import logging
-import math
-from datetime import datetime, timezone, timedelta
+import json, time, os, signal, sys, logging, math
+from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import dataclass, field
 from typing import Optional
 
-# ── Imports tiers (requirements.txt) ────────────────────────────────────────
+# ── Dépendances tierces ───────────────────────────────────────────────────
 try:
-    import requests          # Appels HTTP vers Alpaca et Anthropic
-except ImportError:
-    sys.exit("❌  Installe les dépendances : pip install -r requirements.txt")
+    import alpaca_trade_api as tradeapi   # SDK officiel Alpaca
+    from alpaca_trade_api.rest import TimeFrame
+    import pandas as pd
+    import pandas_ta as ta                # Calcul HMA, EMA, MACD, RSI, BB, ADX
+    import requests                       # Appels Groq Cloud
+except ImportError as e:
+    sys.exit(f"❌  Dépendance manquante : {e}\n   → pip install -r requirements.txt")
 
 
 # =============================================================================
 # [MODULE 1] CONFIGURATION & CONSTANTES
 # =============================================================================
 
-# ── Clés API — jamais en dur, toujours depuis l'environnement ───────────────
+# ── Clés API — jamais en dur, toujours depuis l'environnement ────────────
 ALPACA_API_KEY    = os.environ.get("ALPACA_API_KEY",    "")
 ALPACA_SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY", "")
-ALPACA_BASE_URL   = os.environ.get("ALPACA_BASE_URL",   "https://paper-api.alpaca.markets/v2")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ALPACA_BASE_URL   = os.environ.get("ALPACA_BASE_URL",   "https://paper-api.alpaca.markets")
+GROQ_API_KEY      = os.environ.get("GROQ_API_KEY",      "")  # console.groq.com
 
-# ── Portefeuille & money management (analyse Gemini) ────────────────────────
-CAPITAL_INITIAL       = 5_000.0   # USD fictifs (paper trading)
-ALLOCATION_PAR_TRADE  = 1_000.0   # ~20% du capital par position
-MAX_POSITIONS         = 5         # Maximum simultané
-STOP_LOSS_PCT         = 0.03      # 3% — stoppez l'hémorragie
-TAKE_PROFIT_PCT       = 0.045     # 4.5% — ratio gain/perte = 1.5×
-MAX_DRAWDOWN_PCT      = 0.05      # Pause forcée si -5% du portefeuille
+# ── Money management ────────────────────────────────────────────────────
+CAPITAL_INITIAL       = 5_000.0
+ALLOCATION_BASE       = 1_000.0   # Allocation standard par trade
+ALLOCATION_FORTE      = 1_200.0   # Conviction FORTE  → +20%
+ALLOCATION_FAIBLE     = 700.0     # Conviction FAIBLE → −30%
+MAX_POSITIONS         = 5
+STOP_LOSS_PCT         = 0.03      # Stop-loss fixe de secours 3%
+TAKE_PROFIT_PCT       = 0.045     # Take-profit fixe 4.5%
+ATR_STOP_MULTIPLIER   = 1.8       # Stop dynamique = 1.8× ATR
+ATR_TP_MULTIPLIER     = 2.7       # TP   dynamique = 2.7× ATR → ratio 1.5×
+TRAILING_STOP_PCT     = 0.025     # Trailing : −2.5% depuis le plus haut
+MAX_DRAWDOWN_PCT      = 0.05      # Pause si drawdown > 5%
 
-# ── Seuils indicateurs techniques ───────────────────────────────────────────
-RSI_SURVENTE          = 35        # En dessous = sur-vendu → opportunité achat
-RSI_SURACHAT          = 65        # Au dessus  = sur-acheté → éviter / vendre
-RSI_PERIODE           = 14        # Période standard RSI
-SMA_COURT_MINUTES     = 5         # SMA rapide : capture le momentum
-SMA_LONG_MINUTES      = 180       # SMA lente  : tendance demi-journée (3h)
-BARRES_REQUISES       = 200       # Nombre de bougies 1-min à récupérer
+# ── Paramètres indicateurs (pandas-ta) ──────────────────────────────────
+HMA_PERIODE         = 10    # Hull MA — vitesse (code fourni)
+EMA_TENDANCE        = 100   # EMA longue — tendance de fond (code fourni)
+EMA_RAPIDE          = 9
+EMA_LENTE           = 21
+MACD_RAPIDE         = 12
+MACD_LENT           = 26
+MACD_SIGNAL_PERIODE = 9
+RSI_PERIODE         = 14
+RSI_SURVENTE        = 35
+RSI_SURACHAT        = 65
+RSI_SURVENTE_EXT    = 20
+RSI_SURACHAT_EXT    = 80
+BB_PERIODE          = 20
+BB_STD              = 2.0
+ADX_PERIODE         = 14
+ADX_SEUIL           = 25
+VOLUME_MULT         = 1.5
+BARRES_LIMIT        = 300   # Bougies 1h récupérées (besoin EMA100 + marge)
 
-# ── Seuil de sentiment ───────────────────────────────────────────────────────
-SEUIL_SENTIMENT_ACHAT = 0.50      # < 0.5 = marché pessimiste → pas d'achat
-SEUIL_SENTIMENT_VENTE = 0.30      # < 0.3 = panique → vendre si position ouverte
+# ── Pondération score composite (total = 100) ────────────────────────────
+POIDS = {
+    "hma_crossover":  25,   # HMA vs prix — signal prioritaire (code fourni)
+    "ema_crossover":  15,   # EMA9 vs EMA21
+    "ema_tendance":   15,   # Prix vs EMA100
+    "macd":           15,   # MACD vs signal line
+    "rsi":            10,   # Zones achat/vente
+    "bollinger":      10,   # Position dans les bandes
+    "adx":            5,    # Force de tendance
+    "volume":         5,    # Confirmation volume
+}
 
-# ── 30 actifs volatils sélectionnés (liste Aywen) ───────────────────────────
-ACTIFS = [
-    "TSLA", "NVDA", "AMD",  "AMZN", "NFLX",
-    "META", "AAPL", "MSFT", "GOOGL","INTC",
-    "COIN", "SOFI", "PLTR", "RIVN", "LCID",
-    "NIO",  "UBER", "LYFT", "SNAP", "RBLX",
-    "HOOD", "DKNG", "PENN", "GME",  "AMC",
-    "SPY",  "QQQ",  "KO",   "DAL",  "BA",
+# ── Seuils de décision ───────────────────────────────────────────────────
+SEUIL_TECH_BUY          = 60
+SEUIL_TECH_SELL         = 40
+SEUIL_SENTIMENT_BUY     = 0.52
+SEUIL_SENTIMENT_SELL    = 0.35
+SEUIL_CONVICTION_FORTE  = 75
+SEUIL_CONVICTION_FAIBLE = 55
+
+# ── 30 actifs (actions + 2 crypto disponibles sur Alpaca Paper) ─────────
+ACTIFS_ACTIONS = [
+    "TSLA","NVDA","AMD", "AMZN","NFLX",
+    "META","AAPL","MSFT","GOOGL","INTC",
+    "COIN","SOFI","PLTR","RIVN","LCID",
+    "NIO", "UBER","LYFT","SNAP","RBLX",
+    "HOOD","DKNG","PENN","GME", "AMC",
+    "SPY", "QQQ", "KO",  "DAL", "BA",
 ]
 
-# ── Chemins de sortie ────────────────────────────────────────────────────────
-DATA_DIR      = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json")).parent
-JSON_SORTIE   = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
-INTERVALLE    = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
+ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD"]   # Format Alpaca crypto
+
+ACTIFS_TOUS = ACTIFS_ACTIONS + ACTIFS_CRYPTO
+
+SECTEURS = {
+    "TECH":    ["TSLA","NVDA","AMD","AMZN","NFLX","META","AAPL","MSFT","GOOGL","INTC"],
+    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD"],
+    "FINTECH": ["SOFI","PLTR"],
+    "EV":      ["RIVN","LCID","NIO"],
+    "MOBILITY":["UBER","LYFT"],
+    "SOCIAL":  ["SNAP","RBLX"],
+    "GAMING":  ["DKNG","PENN","GME","AMC"],
+    "ETF":     ["SPY","QQQ"],
+    "AUTRES":  ["KO","DAL","BA"],
+}
+MAX_PAR_SECTEUR = 2
+
+DATA_DIR    = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json")).parent
+JSON_SORTIE = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
+INTERVALLE  = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
 
 
 # =============================================================================
-# [MODULE 2] AlpacaClient — Wrapper REST Alpaca Paper Trading
+# [MODULE 2] AlpacaClientV2 — SDK officiel alpaca-trade-api
 # =============================================================================
 
-class AlpacaClient:
+class AlpacaClientV2:
     """
-    Interface complète avec l'API Alpaca v2.
-    Toutes les opérations broker passent exclusivement par cette classe.
-    
-    Endpoints utilisés :
-      GET  /v2/account              → solde et equity
-      GET  /v2/positions            → positions ouvertes
-      GET  /v2/stocks/{sym}/bars    → données OHLC historiques
-      POST /v2/orders               → soumettre un ordre market
-      DELETE /v2/positions/{sym}    → liquider une position
+    Utilise le SDK officiel alpaca-trade-api (identique au code fourni).
+
+    Méthodes principales :
+      get_compte()          → equity, cash, buying_power
+      get_positions()       → positions ouvertes indexées par ticker
+      get_barres_actions()  → DataFrame pandas via api.get_bars()
+      get_barres_crypto()   → DataFrame pandas via api.get_crypto_bars()
+      soumettre_ordre()     → api.submit_order() (achat/vente market)
+      liquider_position()   → api.close_position()
     """
 
     def __init__(self):
         if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
             raise ValueError(
-                "❌  ALPACA_API_KEY et ALPACA_SECRET_KEY doivent être définis "
-                "dans les variables d'environnement (GitHub Secrets)."
+                "ALPACA_API_KEY / ALPACA_SECRET_KEY manquants.\n"
+                "→ Définir dans GitHub Secrets ou variables d'environnement."
             )
-        self.base    = ALPACA_BASE_URL.rstrip("/")
-        self.headers = {
-            "APCA-API-KEY-ID":     ALPACA_API_KEY,
-            "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-            "Content-Type":        "application/json",
-        }
-        self.logger = logging.getLogger("AlpacaClient")
+        # Initialisation du SDK officiel (exactement comme le code fourni)
+        self.api = tradeapi.REST(
+            ALPACA_API_KEY,
+            ALPACA_SECRET_KEY,
+            ALPACA_BASE_URL,
+            api_version="v2",
+        )
+        self.logger = logging.getLogger("Alpaca")
 
-    def _get(self, endpoint: str, params: dict = None) -> dict:
-        """GET générique avec gestion des erreurs HTTP."""
-        url = f"{self.base}/{endpoint.lstrip('/')}"
-        r = requests.get(url, headers=self.headers, params=params, timeout=15)
-        if r.status_code == 429:
-            self.logger.warning("Rate limit Alpaca — attente 5s")
-            time.sleep(5)
-            r = requests.get(url, headers=self.headers, params=params, timeout=15)
-        r.raise_for_status()
-        return r.json()
-
-    def _post(self, endpoint: str, payload: dict) -> dict:
-        """POST générique."""
-        url = f"{self.base}/{endpoint.lstrip('/')}"
-        r = requests.post(url, headers=self.headers, json=payload, timeout=15)
-        r.raise_for_status()
-        return r.json()
-
-    def _delete(self, endpoint: str) -> dict:
-        """DELETE générique (liquidation de position)."""
-        url = f"{self.base}/{endpoint.lstrip('/')}"
-        r = requests.delete(url, headers=self.headers, timeout=15)
-        if r.status_code == 204:
-            return {}
-        r.raise_for_status()
-        return r.json()
-
-    # ── Compte ────────────────────────────────────────────────────────────────
     def get_compte(self) -> dict:
-        """Retourne l'equity, le cash disponible et la valeur du portefeuille."""
-        data = self._get("/account")
+        """Retourne equity, cash, buying_power via le SDK."""
+        acc = self.api.get_account()
         return {
-            "equity":          float(data.get("equity",          0)),
-            "cash":            float(data.get("cash",             0)),
-            "buying_power":    float(data.get("buying_power",     0)),
-            "portfolio_value": float(data.get("portfolio_value",  0)),
-            "currency":        data.get("currency", "USD"),
+            "equity":        float(acc.equity),
+            "cash":          float(acc.cash),
+            "buying_power":  float(acc.buying_power),
+            "portfolio_value": float(acc.portfolio_value),
         }
 
-    # ── Positions ─────────────────────────────────────────────────────────────
     def get_positions(self) -> dict:
-        """
-        Retourne toutes les positions ouvertes sous forme de dict indexé par ticker.
-        Chaque entrée contient : qty, avg_entry_price, current_price, unrealized_pl
-        """
-        data = self._get("/positions")
+        """Toutes les positions ouvertes, indexées par symbol."""
         positions = {}
-        for p in data:
-            sym = p["symbol"]
-            positions[sym] = {
-                "ticker":            sym,
-                "qty":               float(p.get("qty", 0)),
-                "avg_entry_price":   float(p.get("avg_entry_price", 0)),
-                "current_price":     float(p.get("current_price", 0)),
-                "market_value":      float(p.get("market_value", 0)),
-                "unrealized_pl":     float(p.get("unrealized_pl", 0)),
-                "unrealized_plpc":   float(p.get("unrealized_plpc", 0)) * 100,
-                "side":              p.get("side", "long"),
+        for p in self.api.list_positions():
+            positions[p.symbol] = {
+                "ticker":          p.symbol,
+                "qty":             float(p.qty),
+                "avg_entry_price": float(p.avg_entry_price),
+                "current_price":   float(p.current_price),
+                "market_value":    float(p.market_value),
+                "unrealized_pl":   float(p.unrealized_pl),
+                "unrealized_plpc": float(p.unrealized_plpc) * 100,
+                "highest_price":   float(p.current_price),
             }
         return positions
 
-    # ── Données OHLC ──────────────────────────────────────────────────────────
-    def get_barres(self, ticker: str, limit: int = BARRES_REQUISES) -> list:
+    def get_barres(self, ticker: str, limit: int = BARRES_LIMIT) -> pd.DataFrame:
         """
-        Récupère les N dernières bougies 1-minute pour un actif.
-        Retourne une liste de dicts {t, o, h, l, c, v} triée par date croissante.
-        Utilise l'endpoint /v2/stocks/{symbol}/bars (Alpaca Data API v2).
+        Récupère les barres horaires sous forme de DataFrame pandas.
+        Utilise get_crypto_bars() pour BTC/ETH, get_bars() pour les actions.
+        Retourne un DataFrame avec colonnes : open, high, low, close, volume
         """
-        # L'endpoint data est sur une URL différente pour Alpaca
-        data_base = "https://data.alpaca.markets/v2"
-        url    = f"{data_base}/stocks/{ticker}/bars"
-        params = {
-            "timeframe": "1Min",
-            "limit":     limit,
-            "sort":      "asc",
-        }
-        r = requests.get(url, headers=self.headers, params=params, timeout=15)
-        if r.status_code in (403, 422):
-            # Actif non disponible ou marché fermé — retourne liste vide
-            return []
-        r.raise_for_status()
-        barres_raw = r.json().get("bars", []) or []
-        return [
-            {
-                "t": b["t"],
-                "o": float(b["o"]),
-                "h": float(b["h"]),
-                "l": float(b["l"]),
-                "c": float(b["c"]),
-                "v": int(b.get("v", 0)),
-            }
-            for b in barres_raw
-        ]
+        try:
+            if "/" in ticker:
+                # Crypto — même approche que dans le code fourni
+                df = self.api.get_crypto_bars(
+                    ticker, TimeFrame.Hour, limit=limit
+                ).df
+            else:
+                # Actions — timeframe 1 heure
+                df = self.api.get_bars(
+                    ticker, TimeFrame.Hour, limit=limit
+                ).df
 
-    # ── Ordres ────────────────────────────────────────────────────────────────
-    def acheter_market(self, ticker: str, montant_usd: float) -> dict:
-        """
-        Soumet un ordre d'achat market en mode "notional" (montant en USD).
-        Alpaca calcule automatiquement la quantité de fractions d'actions.
-        """
-        payload = {
-            "symbol":        ticker,
-            "notional":      str(round(montant_usd, 2)),
-            "side":          "buy",
-            "type":          "market",
-            "time_in_force": "day",
-        }
-        return self._post("/orders", payload)
+            if df is None or df.empty:
+                return pd.DataFrame()
 
-    def vendre_position(self, ticker: str) -> dict:
-        """Liquide intégralement la position sur un actif."""
-        return self._delete(f"/positions/{ticker}")
+            # Normalise les noms de colonnes en minuscules
+            df.columns = [c.lower() for c in df.columns]
+            df = df.sort_index()
+            return df
 
-    def get_prix_courant(self, ticker: str) -> Optional[float]:
-        """Récupère le dernier prix via les barres (fallback sur position)."""
-        barres = self.get_barres(ticker, limit=2)
-        if barres:
-            return barres[-1]["c"]
-        return None
+        except Exception as e:
+            self.logger.warning(f"Barres {ticker} : {e}")
+            return pd.DataFrame()
+
+    def soumettre_ordre(self, ticker: str, montant_usd: float,
+                        side: str = "buy") -> Optional[object]:
+        """
+        Soumet un ordre market notional (USD) via api.submit_order().
+        Pour la crypto, utilise time_in_force='gtc' (identique au code fourni).
+        """
+        tif = "gtc" if "/" in ticker else "day"
+        # Alpaca notional : montant en USD, il calcule la quantité
+        ordre = self.api.submit_order(
+            symbol=ticker.replace("/", ""),  # BTC/USD → BTCUSD pour l'ordre
+            notional=str(round(montant_usd, 2)),
+            side=side,
+            type="market",
+            time_in_force=tif,
+        )
+        self.logger.info(f"Ordre {side.upper()} {ticker} ${montant_usd:.0f} → id={ordre.id}")
+        return ordre
+
+    def liquider_position(self, ticker: str) -> bool:
+        """Liquide intégralement la position via api.close_position()."""
+        try:
+            sym = ticker.replace("/", "")
+            self.api.close_position(sym)
+            return True
+        except Exception as e:
+            self.logger.error(f"Erreur liquidation {ticker} : {e}")
+            return False
 
 
 # =============================================================================
-# [MODULE 3] MoteurTechnique — SMA + RSI + signal de décision
+# [MODULE 3] MoteurIndicateurs — pandas-ta (HMA + tous les indicateurs)
 # =============================================================================
-class MoteurTechnique:
+
+class MoteurIndicateurs:
     """
-    Moteur technique amélioré : SMA, HMA, Régression Linéaire et Volume.
-    Chaque algorithme contribue équitablement au signal final.
+    Calcule tous les indicateurs via pandas-ta sur le DataFrame Alpaca.
+
+    Indicateurs :
+      HMA(10)      : Hull MA — réactif, détecte les croisements prix/HMA
+                     Signal : prix croise au-dessus du HMA → momentum haussier
+                     (logique directement inspirée du code fourni)
+      EMA(100)     : filtre de tendance longue (code fourni)
+      EMA(9/21)    : croisement court terme
+      MACD(12,26,9): momentum
+      RSI(14)      : sur-achat/sur-vente
+      BB(20,2)     : position dans les bandes de Bollinger
+      ADX(14)      : force de la tendance
+      Volume SMA   : pic de volume
     """
 
     def __init__(self):
-        self.logger = logging.getLogger("MoteurTechnique")
+        self.logger = logging.getLogger("Indicateurs")
 
-    # --- Utilitaires mathématiques ---
-    @staticmethod
-    def _sma(values: list, p: int) -> Optional[float]:
-        return sum(values[-p:]) / p if len(values) >= p else None
+    def calculer(self, ticker: str, df: pd.DataFrame) -> dict:
+        """
+        Applique pandas-ta sur le DataFrame et retourne un dict complet
+        avec tous les indicateurs, le score composite et le signal final.
+        """
+        result = {
+            "ticker": ticker, "signal": "HOLD", "score": 50,
+            "conviction": "FAIBLE", "raison": "Données insuffisantes",
+            "indicateurs": {}, "prix": None, "atr": None,
+            "croisement_hma": False,
+        }
 
-    @staticmethod
-    def _hma(values: list, p: int) -> Optional[float]:
-        """Hull Moving Average : plus réactif que la SMA."""
-        if len(values) < p: return None
-        half_p = int(p / 2)
-        sqrt_p = int(math.sqrt(p))
-        # wma_half = 2 * WMA(n/2) - WMA(n)
-        # Ici on utilise une simplification SMA pour rester léger sans pandas
-        def _simple_wma(data, period):
-            weights = list(range(1, period + 1))
-            return sum(d * w for d, w in zip(data[-period:], weights)) / sum(weights)
-        
-        diff = [2 * _simple_wma(values[:i+1], half_p) - _simple_wma(values[:i+1], p) 
-                for i in range(len(values) - sqrt_p, len(values))]
-        return _simple_wma(diff, sqrt_p)
+        # Minimum de barres pour calculer EMA100 + marge
+        if len(df) < BARRES_LIMIT // 2:
+            return result
 
-    @staticmethod
-    def _linreg(values: list, p: int) -> Optional[float]:
-        """Régression Linéaire (Moindres carrés) pour détecter la pente."""
-        if len(values) < p: return None
-        y = values[-p:]
-        x = list(range(p))
-        n = p
-        sum_x = sum(x)
-        sum_y = sum(y)
-        sum_xy = sum(xi * yi for xi, yi in zip(x, y))
-        sum_xx = sum(xi**2 for xi in x)
-        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x**2)
-        intercept = (sum_y - slope * sum_x) / n
-        return slope * (p - 1) + intercept
+        closes  = df["close"]
+        highs   = df["high"]
+        lows    = df["low"]
+        volumes = df["volume"]
+        prix    = float(closes.iloc[-1])
+        result["prix"] = round(prix, 4)
 
-    @staticmethod
-    def _rsi(closes: list, periode: int = RSI_PERIODE) -> Optional[float]:
-        if len(closes) < periode + 1: return None
-        deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
-        last_deltas = deltas[-periode:]
-        up = sum(d for d in last_deltas if d > 0) / periode
-        down = sum(abs(d) for d in last_deltas if d < 0) / periode
-        if down == 0: return 100.0
-        return round(100 - (100 / (1 + (up / down))), 2)
+        ind = {}
+        points_buy  = 0.0
+        points_sell = 0.0
 
-    def analyser(self, ticker: str, barres: list) -> dict:
-        if len(barres) < SMA_LONG_MINUTES:
-            return {"ticker": ticker, "signal": "HOLD", "raison": "Data insuffisante"}
+        # ── 1. HMA — Hull Moving Average (prioritaire, code fourni) ──────
+        try:
+            hma_serie = ta.hma(closes, length=HMA_PERIODE)
+            if hma_serie is not None and len(hma_serie) >= 2:
+                hma_now  = float(hma_serie.iloc[-1])
+                hma_prev = float(hma_serie.iloc[-2])
+                prix_prev = float(closes.iloc[-2])
+                ind["hma"] = round(hma_now, 4)
 
-        closes = [b["c"] for b in barres]
-        volumes = [b["v"] for b in barres]
-        prix = closes[-1]
+                # Croisement HMA : prix passe AU-DESSUS du HMA (code fourni)
+                croisement_hausse = (prix_prev < hma_prev) and (prix > hma_now)
+                # Croisement baissier : prix passe EN-DESSOUS du HMA
+                croisement_baisse = (prix_prev > hma_prev) and (prix < hma_now)
 
-        # 1. Calcul des indicateurs
-        sma_c = self._sma(closes, 5)
-        sma_l = self._sma(closes, 180)
-        hma = self._hma(closes, 10)
-        linreg = self._linreg(closes, 20)
-        rsi = self._rsi(closes, 14)
-        
-        # Filtre de Volume (moyenne 20 dernières minutes)
-        vol_moyen = sum(volumes[-20:]) / 20
-        vol_ok = volumes[-1] > vol_moyen * 1.1 # +10% de volume requis
+                result["croisement_hma"] = croisement_hausse
 
-        # 2. Système de vote équitable (3 voix)
-        score_bull = 0
-        if sma_c and sma_l and sma_c > sma_l: score_bull += 1
-        if hma and prix > hma: score_bull += 1
-        if linreg and prix > linreg: score_bull += 1
+                if croisement_hausse:
+                    points_buy  += POIDS["hma_crossover"] * 1.2  # bonus croisement
+                    ind["hma_signal"] = "crossover_hausse"
+                elif prix > hma_now:
+                    points_buy  += POIDS["hma_crossover"] * 0.6
+                    ind["hma_signal"] = "au_dessus"
+                elif croisement_baisse:
+                    points_sell += POIDS["hma_crossover"] * 1.2
+                    ind["hma_signal"] = "crossover_baisse"
+                else:
+                    points_sell += POIDS["hma_crossover"] * 0.6
+                    ind["hma_signal"] = "en_dessous"
+        except Exception as e:
+            self.logger.debug(f"HMA {ticker}: {e}")
 
-        # 3. Logique de Signal
-        signal = "HOLD"
-        raison = f"SMA:{'↑' if (sma_c and sma_c>sma_l) else '↓'} HMA:{'↑' if (hma and prix>hma) else '↓'} LR:{'↑' if (linreg and prix>linreg) else '↓'}"
+        # ── 2. EMA tendance longue (EMA100, code fourni) ─────────────────
+        try:
+            ema100 = ta.ema(closes, length=EMA_TENDANCE)
+            if ema100 is not None:
+                val_ema100 = float(ema100.iloc[-1])
+                ind["ema_100"] = round(val_ema100, 4)
+                if prix > val_ema100:
+                    points_buy  += POIDS["ema_tendance"]
+                    ind["ema100_signal"] = "prix_au_dessus"
+                else:
+                    points_sell += POIDS["ema_tendance"]
+                    ind["ema100_signal"] = "prix_en_dessous"
+        except Exception as e:
+            self.logger.debug(f"EMA100 {ticker}: {e}")
 
-        # BUY : Majorité d'algos (2/3) + RSI pas sur-acheté + Volume actif
-        if score_bull >= 2 and rsi < 65 and vol_ok:
+        # ── 3. EMA court terme croisement (EMA9 vs EMA21) ────────────────
+        try:
+            ema9  = ta.ema(closes, length=EMA_RAPIDE)
+            ema21 = ta.ema(closes, length=EMA_LENTE)
+            if ema9 is not None and ema21 is not None:
+                v9  = float(ema9.iloc[-1])
+                v21 = float(ema21.iloc[-1])
+                ind["ema_9"]  = round(v9,  4)
+                ind["ema_21"] = round(v21, 4)
+                if v9 > v21:
+                    points_buy  += POIDS["ema_crossover"]
+                else:
+                    points_sell += POIDS["ema_crossover"]
+        except Exception as e:
+            self.logger.debug(f"EMA9/21 {ticker}: {e}")
+
+        # ── 4. MACD ───────────────────────────────────────────────────────
+        try:
+            macd_df = ta.macd(closes,
+                              fast=MACD_RAPIDE,
+                              slow=MACD_LENT,
+                              signal=MACD_SIGNAL_PERIODE)
+            if macd_df is not None and not macd_df.empty:
+                col_macd = [c for c in macd_df.columns if "MACD_" in c and "s" not in c.lower() and "h" not in c.lower()]
+                col_sig  = [c for c in macd_df.columns if "MACDs" in c]
+                col_hist = [c for c in macd_df.columns if "MACDh" in c]
+                if col_macd and col_sig and col_hist:
+                    mval  = float(macd_df[col_macd[0]].iloc[-1])
+                    msig  = float(macd_df[col_sig[0]].iloc[-1])
+                    mhist = float(macd_df[col_hist[0]].iloc[-1])
+                    ind["macd"]      = round(mval,  6)
+                    ind["macd_sig"]  = round(msig,  6)
+                    ind["macd_hist"] = round(mhist, 6)
+                    if mval > msig and mhist > 0:
+                        points_buy  += POIDS["macd"]
+                    elif mval < msig and mhist < 0:
+                        points_sell += POIDS["macd"]
+                    else:
+                        points_buy  += POIDS["macd"] * 0.3
+        except Exception as e:
+            self.logger.debug(f"MACD {ticker}: {e}")
+
+        # ── 5. RSI ────────────────────────────────────────────────────────
+        try:
+            rsi_serie = ta.rsi(closes, length=RSI_PERIODE)
+            if rsi_serie is not None:
+                rsi_val = float(rsi_serie.iloc[-1])
+                ind["rsi"] = round(rsi_val, 2)
+                if rsi_val < RSI_SURVENTE_EXT:
+                    points_buy  += POIDS["rsi"]
+                elif rsi_val < RSI_SURVENTE:
+                    points_buy  += POIDS["rsi"] * 0.7
+                elif rsi_val > RSI_SURACHAT_EXT:
+                    points_sell += POIDS["rsi"]
+                elif rsi_val > RSI_SURACHAT:
+                    points_sell += POIDS["rsi"] * 0.7
+                else:
+                    points_buy  += POIDS["rsi"] * 0.3
+        except Exception as e:
+            self.logger.debug(f"RSI {ticker}: {e}")
+
+        # ── 6. Bollinger Bands ────────────────────────────────────────────
+        try:
+            bb_df = ta.bbands(closes, length=BB_PERIODE, std=BB_STD)
+            if bb_df is not None and not bb_df.empty:
+                col_u = [c for c in bb_df.columns if "BBU" in c]
+                col_l = [c for c in bb_df.columns if "BBL" in c]
+                col_m = [c for c in bb_df.columns if "BBM" in c]
+                if col_u and col_l and col_m:
+                    bb_u = float(bb_df[col_u[0]].iloc[-1])
+                    bb_l = float(bb_df[col_l[0]].iloc[-1])
+                    bb_m = float(bb_df[col_m[0]].iloc[-1])
+                    ind["bb_upper"] = round(bb_u, 4)
+                    ind["bb_mid"]   = round(bb_m, 4)
+                    ind["bb_lower"] = round(bb_l, 4)
+                    ind["bb_width"] = round((bb_u - bb_l) / bb_m * 100, 3)
+                    if prix <= bb_l:
+                        points_buy  += POIDS["bollinger"]
+                    elif prix >= bb_u:
+                        points_sell += POIDS["bollinger"]
+                    elif prix < bb_m:
+                        points_buy  += POIDS["bollinger"] * 0.4
+                    else:
+                        points_sell += POIDS["bollinger"] * 0.4
+        except Exception as e:
+            self.logger.debug(f"BB {ticker}: {e}")
+
+        # ── 7. ADX ────────────────────────────────────────────────────────
+        try:
+            adx_df = ta.adx(highs, lows, closes, length=ADX_PERIODE)
+            if adx_df is not None and not adx_df.empty:
+                col_adx = [c for c in adx_df.columns if c.startswith("ADX_")]
+                if col_adx:
+                    adx_val = float(adx_df[col_adx[0]].iloc[-1])
+                    ind["adx"] = round(adx_val, 2)
+                    if adx_val > ADX_SEUIL:
+                        bonus = POIDS["adx"]
+                        if points_buy >= points_sell:
+                            points_buy  += bonus
+                        else:
+                            points_sell += bonus
+        except Exception as e:
+            self.logger.debug(f"ADX {ticker}: {e}")
+
+        # ── 8. ATR pour stops dynamiques ─────────────────────────────────
+        try:
+            atr_serie = ta.atr(highs, lows, closes, length=14)
+            if atr_serie is not None:
+                atr_val = float(atr_serie.iloc[-1])
+                ind["atr"]     = round(atr_val, 4)
+                ind["atr_pct"] = round(atr_val / prix * 100, 3)
+                result["atr"]  = atr_val
+        except Exception as e:
+            self.logger.debug(f"ATR {ticker}: {e}")
+
+        # ── 9. Volume Spike ───────────────────────────────────────────────
+        try:
+            vol_sma = ta.sma(volumes, length=20)
+            if vol_sma is not None:
+                vol_now = float(volumes.iloc[-1])
+                vol_avg = float(vol_sma.iloc[-1])
+                if vol_avg > 0:
+                    ratio = vol_now / vol_avg
+                    ind["volume_ratio"] = round(ratio, 2)
+                    if ratio > VOLUME_MULT:
+                        if points_buy >= points_sell:
+                            points_buy  += POIDS["volume"]
+                        else:
+                            points_sell += POIDS["volume"]
+        except Exception as e:
+            self.logger.debug(f"Volume {ticker}: {e}")
+
+        # ── Score composite ───────────────────────────────────────────────
+        total_possible = sum(POIDS.values())
+        score_buy  = (points_buy  / total_possible) * 100
+        score_sell = (points_sell / total_possible) * 100
+
+        if score_buy > score_sell:
+            score = round(50 + score_buy / 2, 1)
+        else:
+            score = round(50 - score_sell / 2, 1)
+        score = max(0.0, min(100.0, score))
+
+        # ── Signal et conviction ──────────────────────────────────────────
+        if score >= SEUIL_TECH_BUY:
             signal = "BUY"
-            raison = f"Accord Majoritaire ({score_bull}/3) + Vol OK + RSI {rsi}"
-        # SELL : Si un signal de sortie majeur apparaît ou RSI saturation
-        elif score_bull <= 1 or rsi > 70:
+        elif score <= SEUIL_TECH_SELL:
             signal = "SELL"
-            raison = "Perte de majorité ou RSI sur-achat"
+        else:
+            signal = "HOLD"
 
-        return {
-            "ticker": ticker,
-            "signal": signal,
-            "raison": raison,
-            "sma_court": sma_c,
-            "sma_long": sma_l,
-            "rsi": rsi,
-            "prix": prix,
-            "vol_ok": vol_ok,
-            "score_algos": f"{score_bull}/3"
-        }
+        conviction = (
+            "FORTE"   if score >= SEUIL_CONVICTION_FORTE  else
+            "MOYENNE" if score >= SEUIL_CONVICTION_FAIBLE else
+            "FAIBLE"
+        )
+
+        # Raison lisible
+        parts = []
+        if ind.get("hma_signal") in ("crossover_hausse", "crossover_baisse"):
+            parts.append(f"HMA {'↑' if 'hausse' in ind['hma_signal'] else '↓'} crossover")
+        if ind.get("macd_hist", 0) > 0: parts.append("MACD↑")
+        if ind.get("macd_hist", 0) < 0: parts.append("MACD↓")
+        if ind.get("rsi") and ind["rsi"] < RSI_SURVENTE: parts.append(f"RSI survente({ind['rsi']:.0f})")
+        if ind.get("rsi") and ind["rsi"] > RSI_SURACHAT: parts.append(f"RSI surachat({ind['rsi']:.0f})")
+        if ind.get("adx") and ind["adx"] > ADX_SEUIL: parts.append(f"ADX fort({ind['adx']:.0f})")
+        raison = " | ".join(parts) if parts else f"Score composite {score:.0f}/100"
+
+        result.update({
+            "signal": signal, "score": score,
+            "conviction": conviction, "raison": raison,
+            "indicateurs": ind,
+        })
+        return result
 
 
 # =============================================================================
-# [MODULE 4] AnalyseurSentiment — Score 0.0–1.0 via Claude (Anthropic)
+# [MODULE 4] AnalyseurSentimentGroq — API Groq Cloud
 # =============================================================================
 
-class AnalyseurSentiment:
+class AnalyseurSentimentGroq:
     """
-    Implémente la "variable émotion" de l'analyse Aywen.
-    
-    Flux :
-      1. Génère un contexte textuel fictif horodaté simulant des flux de
-         tweets/news pour l'actif demandé (pas de scraping Twitter réel
-         requis — le LLM génère et analyse un scénario réaliste)
-      2. Soumet le contexte à Claude via l'API Anthropic
-      3. Extrait le score numérique 0.0–1.0 de la réponse
-    
-    Interprétation du score (table Gemini) :
-      0.0–0.3 → Panique       : bloquer les achats
-      0.3–0.5 → Inquiétude    : temporiser
-      0.5–0.7 → Optimisme     : valider les signaux techniques
-      0.7–1.0 → Euphorie      : confirmation forte d'achat
+    Analyse de sentiment via Groq Cloud (groq.com).
+    Endpoint : https://api.groq.com/openai/v1/chat/completions
+    Modèle   : llama-3.3-70b-versatile — rapide, gratuit, très précis
+
+    Prompt enrichi avec données techniques + contexte secteur + biais Groq.
+    Retourne score 0.0–1.0 + résumé + facteurs positifs/négatifs + biais.
+
+    Table de décision (Aywen/Gemini) :
+      0.00–0.35 → Panique   : bloquer achats, déclencher ventes
+      0.35–0.52 → Inquiétude: temporiser
+      0.52–0.70 → Optimisme : valider les signaux techniques
+      0.70–1.00 → Euphorie  : renforcer conviction
     """
 
-    ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+    GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
+    MODELE    = "llama-3.3-70b-versatile"
+    CACHE_TTL = 180   # 3 minutes
 
     def __init__(self):
-        self.logger = logging.getLogger("AnalyseurSentiment")
-        self._cache: dict = {}         # Cache 5 min pour éviter les appels redondants
-        self._cache_ts: dict = {}
+        self.logger    = logging.getLogger("Groq")
+        self._cache    = {}
+        self._cache_ts = {}
 
-    def _construire_prompt(self, ticker: str, prix: float, rsi: Optional[float]) -> str:
+    def _secteur(self, ticker: str) -> str:
+        for s, tickers in SECTEURS.items():
+            if ticker in tickers:
+                return s
+        return "AUTRES"
+
+    def scorer(self, ticker: str, prix: float,
+               score_tech: float = 50,
+               rsi: Optional[float] = None,
+               hma_signal: Optional[str] = None,
+               atr_pct: Optional[float] = None) -> dict:
         """
-        Construit le prompt qui demande à Claude d'analyser le sentiment
-        de marché pour cet actif et de retourner uniquement un score 0.0–1.0.
+        Appelle Groq Cloud pour scorer le sentiment du marché sur l'actif.
+        Cache 3 minutes, fallback 0.55 si clé absente ou erreur réseau.
         """
-        rsi_info = f", RSI actuel : {rsi:.1f}" if rsi else ""
-        return f"""Tu es un analyste quantitatif spécialisé dans l'analyse de sentiment de marché.
-
-Actif analysé : {ticker} (prix courant : ${prix:.2f}{rsi_info})
-Date/heure : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
-
-Génère un scénario réaliste de sentiment de marché actuel pour {ticker} en te basant sur :
-- Les conditions macroéconomiques générales du moment
-- La psychologie typique des traders sur cet actif
-- Le niveau de prix et le RSI fournis
-
-Puis évalue le sentiment global du marché pour {ticker} sur une échelle de 0.0 à 1.0 :
-  0.0 = panique totale / pessimisme extrême
-  0.5 = neutralité / équilibre
-  1.0 = euphorie totale / optimisme maximal
-
-RÉPONDS UNIQUEMENT avec un JSON strict, sans aucun texte autour :
-{{"score": <float entre 0.0 et 1.0>, "resume": "<une phrase décrivant le sentiment>"}}"""
-
-    def scorer(self, ticker: str, prix: float, rsi: Optional[float] = None) -> dict:
-        """
-        Retourne le score de sentiment pour un actif.
-        Utilise un cache de 5 minutes pour limiter les appels API.
-        En cas d'erreur API (clé absente, rate limit), retourne 0.55 (neutre optimiste).
-        """
-        # ── Cache 5 minutes ──────────────────────────────────────────────────
-        maintenant = time.time()
-        if ticker in self._cache and (maintenant - self._cache_ts.get(ticker, 0)) < 300:
+        # ── Cache ─────────────────────────────────────────────────────────
+        now = time.time()
+        if ticker in self._cache and (now - self._cache_ts.get(ticker, 0)) < self.CACHE_TTL:
             return self._cache[ticker]
 
-        # ── Fallback si pas de clé Anthropic ────────────────────────────────
-        if not ANTHROPIC_API_KEY:
-            self.logger.warning(f"ANTHROPIC_API_KEY absent — score neutre pour {ticker}")
-            return {"score": 0.55, "resume": "Analyse de sentiment indisponible (clé API manquante)"}
+        if not GROQ_API_KEY:
+            self.logger.warning(f"GROQ_API_KEY absent — fallback neutre {ticker}")
+            return self._fallback("Clé GROQ_API_KEY non configurée")
 
-        prompt = self._construire_prompt(ticker, prix, rsi)
+        secteur   = self._secteur(ticker)
+        rsi_str   = f"RSI={rsi:.1f}" if rsi else "RSI=N/A"
+        hma_str   = f"HMA_signal={hma_signal}" if hma_signal else ""
+        atr_str   = f"ATR={atr_pct:.2f}%" if atr_pct else ""
+
+        prompt = f"""Tu es un analyste quantitatif expert en psychologie de marché et trading algorithmique.
+
+=== ACTIF ===
+Ticker  : {ticker}
+Secteur : {secteur}
+Prix    : ${prix:.4f}
+Données : {rsi_str} | {hma_str} | {atr_str} | Score technique : {score_tech:.0f}/100
+Heure   : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+=== MISSION ===
+Évalue le sentiment de marché actuel pour {ticker} en intégrant :
+1. Contexte macroéconomique général (taux Fed, inflation, risk-on/off)
+2. Psychologie des traders retail et institutionnels sur cet actif
+3. Dynamiques sectorielles ({secteur})
+4. Cohérence avec les données techniques fournies
+
+=== ÉCHELLE ===
+0.0 = Panique absolue | 0.5 = Neutralité | 1.0 = Euphorie totale
+
+=== FORMAT STRICT ===
+JSON uniquement, sans texte autour :
+{{"score": <float 0.0-1.0>, "confiance": <float 0.0-1.0>, "resume": "<phrase>",
+  "facteurs_positifs": ["<f1>","<f2>"], "facteurs_negatifs": ["<f1>","<f2>"],
+  "biais_court_terme": "<haussier|baissier|neutre>"}}"""
 
         try:
             r = requests.post(
-                self.ANTHROPIC_URL,
+                self.GROQ_URL,
                 headers={
-                    "x-api-key":         ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type":      "application/json",
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type":  "application/json",
                 },
                 json={
-                    "model":      "claude-sonnet-4-20250514",
-                    "max_tokens": 150,
-                    "messages":   [{"role": "user", "content": prompt}],
+                    "model":       self.MODELE,
+                    "max_tokens":  350,
+                    "temperature": 0.25,
+                    "messages": [
+                        {"role": "system",
+                         "content": "Tu es un expert en analyse de sentiment financier. Réponds uniquement en JSON valide."},
+                        {"role": "user", "content": prompt},
+                    ],
                 },
                 timeout=20,
             )
             r.raise_for_status()
-            texte = r.json()["content"][0]["text"].strip()
-
-            # Nettoyage des éventuels backticks markdown
+            texte = r.json()["choices"][0]["message"]["content"].strip()
             texte = texte.replace("```json", "").replace("```", "").strip()
             data  = json.loads(texte)
 
-            score  = float(data.get("score", 0.55))
-            score  = max(0.0, min(1.0, score))   # Clamp entre 0 et 1
-            resume = str(data.get("resume", ""))
-
-            resultat = {"score": round(score, 3), "resume": resume}
+            score    = float(max(0.0, min(1.0, data.get("score", 0.55))))
+            resultat = {
+                "score":             round(score, 3),
+                "confiance":         float(data.get("confiance", 0.5)),
+                "resume":            str(data.get("resume", "")),
+                "facteurs_positifs": data.get("facteurs_positifs", []),
+                "facteurs_negatifs": data.get("facteurs_negatifs", []),
+                "biais":             data.get("biais_court_terme", "neutre"),
+                "source":            self.MODELE,
+            }
             self._cache[ticker]    = resultat
-            self._cache_ts[ticker] = maintenant
+            self._cache_ts[ticker] = now
+            self.logger.info(f"Groq {ticker}: score={score:.3f} biais={resultat['biais']}")
             return resultat
 
         except Exception as e:
-            self.logger.warning(f"Erreur sentiment {ticker} : {e} — score neutre")
-            return {"score": 0.55, "resume": f"Erreur d'analyse : {e}"}
+            self.logger.warning(f"Groq erreur {ticker}: {e}")
+            return self._fallback(str(e))
+
+    def _fallback(self, raison: str) -> dict:
+        return {
+            "score": 0.55, "confiance": 0.3,
+            "resume": f"Sentiment indisponible ({raison[:60]})",
+            "facteurs_positifs": [], "facteurs_negatifs": [],
+            "biais": "neutre", "source": "fallback",
+        }
 
 
 # =============================================================================
-# [MODULE 5] GestionnaireRisque — Money management strict
+# [MODULE 5] GestionnaireRisque
 # =============================================================================
 
 class GestionnaireRisque:
     """
-    Implémente toutes les règles de protection du capital issues de l'analyse Gemini :
-      - Stop-loss 3% → coupe les pertes immédiatement
-      - Take-profit 4.5% → ratio gain/perte de 1.5×
-      - Max 5 positions → concentration contrôlée
-      - Drawdown max 5% → pause forcée si perte globale excessive
-    
-    Toutes les décisions de sortie d'urgence passent par ce module.
+    Stop-loss dynamique ATR + fixe 3%, take-profit ATR (ratio 1.5×),
+    trailing stop −2.5%, drawdown max 5%, sizing adaptatif, contrôle sectoriel.
     """
 
     def __init__(self, capital_initial: float = CAPITAL_INITIAL):
         self.capital_initial = capital_initial
-        self.logger = logging.getLogger("GestionnaireRisque")
+        self.trailing_highs: dict = {}
+        self.logger = logging.getLogger("Risque")
 
-    def verifier_stop_loss(self, position: dict) -> bool:
-        """
-        Retourne True si la position a atteint le stop-loss (perte >= 3%).
-        La perte est exprimée en pourcentage négatif dans unrealized_plpc.
-        """
-        plpc = position.get("unrealized_plpc", 0)
+    def verifier_stop_loss(self, pos: dict) -> bool:
+        plpc = pos.get("unrealized_plpc", 0)
         if plpc <= -(STOP_LOSS_PCT * 100):
-            self.logger.warning(
-                f"🛑 STOP-LOSS {position['ticker']} : "
-                f"perte {plpc:.2f}% ≥ {STOP_LOSS_PCT*100:.0f}%"
-            )
+            self.logger.warning(f"🛑 STOP-LOSS {pos['ticker']}: {plpc:.2f}%")
             return True
         return False
 
-    def verifier_take_profit(self, position: dict) -> bool:
-        """
-        Retourne True si la position a atteint le take-profit (gain >= 4.5%).
-        """
-        plpc = position.get("unrealized_plpc", 0)
+    def verifier_take_profit(self, pos: dict) -> bool:
+        plpc = pos.get("unrealized_plpc", 0)
         if plpc >= (TAKE_PROFIT_PCT * 100):
-            self.logger.info(
-                f"✅ TAKE-PROFIT {position['ticker']} : "
-                f"gain {plpc:.2f}% ≥ {TAKE_PROFIT_PCT*100:.0f}%"
-            )
+            self.logger.info(f"✅ TAKE-PROFIT {pos['ticker']}: {plpc:.2f}%")
             return True
         return False
 
-    def verifier_drawdown(self, equity_actuelle: float) -> bool:
-        """
-        Retourne True si le drawdown depuis le capital initial dépasse MAX_DRAWDOWN_PCT.
-        Déclenche une pause forcée du bot.
-        """
-        drawdown = (self.capital_initial - equity_actuelle) / self.capital_initial
-        if drawdown >= MAX_DRAWDOWN_PCT:
-            self.logger.error(
-                f"🚨 DRAWDOWN MAX {drawdown*100:.2f}% ≥ {MAX_DRAWDOWN_PCT*100:.0f}% "
-                f"— Pause forcée du bot"
-            )
+    def verifier_trailing_stop(self, pos: dict) -> bool:
+        ticker = pos["ticker"]
+        prix   = pos.get("current_price", 0)
+        if ticker not in self.trailing_highs:
+            self.trailing_highs[ticker] = prix
+        if prix > self.trailing_highs[ticker]:
+            self.trailing_highs[ticker] = prix
+        plus_haut = self.trailing_highs[ticker]
+        recul     = (plus_haut - prix) / plus_haut if plus_haut > 0 else 0
+        plpc      = pos.get("unrealized_plpc", 0)
+        if plpc > 1.5 and recul >= TRAILING_STOP_PCT:
+            self.logger.info(f"📉 TRAILING {ticker}: recul {recul*100:.2f}% depuis ${plus_haut:.2f}")
             return True
         return False
 
-    def capital_suffisant(self, compte: dict) -> bool:
-        """Vérifie qu'on a assez de buying power pour un nouveau trade."""
-        return compte.get("buying_power", 0) >= ALLOCATION_PAR_TRADE
+    def verifier_drawdown(self, equity: float) -> bool:
+        dd = (self.capital_initial - equity) / self.capital_initial
+        if dd >= MAX_DRAWDOWN_PCT:
+            self.logger.error(f"🚨 DRAWDOWN {dd*100:.2f}% — pause forcée")
+            return True
+        return False
 
-    def positions_disponibles(self, nb_positions: int) -> bool:
-        """Vérifie qu'on n'a pas atteint le maximum de positions simultanées."""
-        return nb_positions < MAX_POSITIONS
+    def allocation(self, conviction: str, atr_pct: Optional[float]) -> float:
+        base = {"FORTE": ALLOCATION_FORTE,
+                "MOYENNE": ALLOCATION_BASE,
+                "FAIBLE": ALLOCATION_FAIBLE}.get(conviction, ALLOCATION_BASE)
+        if atr_pct and atr_pct > 2.0:
+            base *= max(0.7, 1 - (atr_pct - 2.0) * 0.1)
+        return round(base, 2)
+
+    def positions_disponibles(self, nb: int) -> bool:
+        return nb < MAX_POSITIONS
+
+    def capital_suffisant(self, compte: dict, montant: float) -> bool:
+        return compte.get("buying_power", 0) >= montant
+
+    def secteur_ok(self, ticker: str, positions: dict) -> bool:
+        for sect, tickers in SECTEURS.items():
+            if ticker in tickers:
+                count = sum(1 for t in positions if t in tickers)
+                return count < MAX_PAR_SECTEUR
+        return True
 
 
 # =============================================================================
-# [MODULE 6] BotRoute — Orchestrateur principal
+# [MODULE 6] ScoreDecisionIA
+# =============================================================================
+
+class ScoreDecisionIA:
+    """
+    Fusionne score technique (60%) + score sentiment Groq (40%).
+    Bonus si croisement HMA détecté (signal fort du code fourni).
+    """
+
+    POIDS_TECH = 0.60
+    POIDS_SENT = 0.40
+
+    def decider(self, analyse_tech: dict, analyse_sent: dict,
+                dans_position: bool) -> dict:
+
+        score_tech   = analyse_tech.get("score",          50)
+        signal_tech  = analyse_tech.get("signal",         "HOLD")
+        croisement   = analyse_tech.get("croisement_hma", False)
+        score_sent   = analyse_sent.get("score",          0.55)
+        biais_sent   = analyse_sent.get("biais",          "neutre")
+
+        # Bonus croisement HMA (signal fort inspiré du code fourni)
+        if croisement and signal_tech == "BUY":
+            score_tech = min(100, score_tech * 1.1)
+
+        score_fusionne = round(
+            score_tech * self.POIDS_TECH + score_sent * 100 * self.POIDS_SENT, 1
+        )
+        score_fusionne = max(0, min(100, score_fusionne))
+
+        action     = "AUCUNE"
+        conviction = "FAIBLE"
+        raison     = ""
+
+        if not dans_position:
+            if (signal_tech == "BUY" and
+                score_sent >= SEUIL_SENTIMENT_BUY and
+                score_fusionne >= SEUIL_TECH_BUY):
+
+                action = "ACHAT"
+                if score_fusionne >= SEUIL_CONVICTION_FORTE:
+                    conviction = "FORTE"
+                elif score_fusionne >= SEUIL_CONVICTION_FAIBLE:
+                    conviction = "MOYENNE"
+                raison = (
+                    f"Score fusionné {score_fusionne:.0f}/100 "
+                    f"(tech={score_tech:.0f} sent={score_sent:.2f} "
+                    f"biais={biais_sent}"
+                    f"{' | HMA crossover ✓' if croisement else ''})"
+                )
+
+            elif signal_tech == "BUY" and score_sent < SEUIL_SENTIMENT_BUY:
+                raison = (
+                    f"BUY bloqué par Groq : sent={score_sent:.2f} "
+                    f"< {SEUIL_SENTIMENT_BUY} | {analyse_sent.get('resume','')[:50]}"
+                )
+            else:
+                raison = analyse_tech.get("raison", "HOLD — signal insuffisant")
+
+        else:
+            if signal_tech == "SELL":
+                action     = "VENTE"
+                conviction = analyse_tech.get("conviction", "MOYENNE")
+                raison     = analyse_tech.get("raison", "Signal SELL technique")
+            elif score_sent < SEUIL_SENTIMENT_SELL:
+                action     = "VENTE"
+                conviction = "FORTE"
+                raison     = f"Panique Groq : sent={score_sent:.2f} | {analyse_sent.get('resume','')[:50]}"
+            else:
+                raison = "Position maintenue"
+
+        return {
+            "action":         action,
+            "conviction":     conviction,
+            "score_fusionne": score_fusionne,
+            "croisement_hma": croisement,
+            "raison":         raison,
+        }
+
+
+# =============================================================================
+# [MODULE 7] BotRoute
 # =============================================================================
 
 class BotRoute:
-    """
-    Assemble tous les modules et exécute la boucle de décision complète.
-    
-    Cycle d'exécution pour chaque actif :
-      1. Récupère les barres OHLC depuis Alpaca
-      2. Calcule SMA + RSI → signal technique
-      3. Score le sentiment de marché via Claude
-      4. Applique le filtre risque (drawdown, positions max, capital)
-      5. Valide la décision finale :
-           BUY  : signal=BUY  ET sentiment>0.5 ET risque OK
-           SELL : signal=SELL OU sentiment<0.3 OU stop-loss/take-profit atteint
-      6. Exécute l'ordre via Alpaca
-      7. Exporte l'état complet vers data/etat_bot.json
-    """
 
     def __init__(self):
-        self.alpaca    = AlpacaClient()
-        self.technique = MoteurTechnique()
-        self.sentiment = AnalyseurSentiment()
-        self.risque    = GestionnaireRisque()
-        self.logger    = logging.getLogger("BotRoute")
-        self.cycle     = 0
+        self.alpaca      = AlpacaClientV2()
+        self.indicateurs = MoteurIndicateurs()
+        self.sentiment   = AnalyseurSentimentGroq()
+        self.risque      = GestionnaireRisque()
+        self.decision    = ScoreDecisionIA()
+        self.logger      = logging.getLogger("BotRoute")
+        self.cycle       = 0
         self.historique_trades: list = []
         self.historique_valeur: list = []
-        self.decisions_cycle: list   = []
-        self.pause_drawdown: bool    = False
+        self.pause_drawdown = False
         DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ── Vérifications de sortie d'urgence sur positions ouvertes ─────────────
     def _auditer_positions(self, positions: dict):
-        """
-        Parcourt toutes les positions ouvertes et applique stop-loss / take-profit.
-        Exécuté en priorité absolue au début de chaque cycle.
-        """
         for ticker, pos in list(positions.items()):
-            if self.risque.verifier_stop_loss(pos) or self.risque.verifier_take_profit(pos):
-                try:
-                    self.alpaca.vendre_position(ticker)
-                    raison = (
-                        f"STOP-LOSS {pos['unrealized_plpc']:.2f}%"
-                        if pos["unrealized_plpc"] <= -(STOP_LOSS_PCT * 100)
-                        else f"TAKE-PROFIT {pos['unrealized_plpc']:.2f}%"
-                    )
-                    trade = {
-                        "type":       "VENTE_AUTO",
-                        "ticker":     ticker,
-                        "prix":       pos["current_price"],
-                        "pnl":        round(pos["unrealized_pl"], 2),
-                        "pnl_pct":    round(pos["unrealized_plpc"], 2),
-                        "raison":     raison,
-                        "timestamp":  datetime.now(timezone.utc).isoformat(),
-                    }
-                    self.historique_trades.append(trade)
-                    self.logger.info(f"[VENTE AUTO] {ticker} — {raison}")
-                except Exception as e:
-                    self.logger.error(f"Erreur vente auto {ticker} : {e}")
+            raison = None
+            if self.risque.verifier_stop_loss(pos):
+                raison = f"STOP-LOSS {pos['unrealized_plpc']:.2f}%"
+            elif self.risque.verifier_take_profit(pos):
+                raison = f"TAKE-PROFIT {pos['unrealized_plpc']:.2f}%"
+            elif self.risque.verifier_trailing_stop(pos):
+                raison = "TRAILING-STOP"
+            if raison:
+                if self.alpaca.liquider_position(ticker):
+                    self.historique_trades.append({
+                        "type": "VENTE_AUTO", "ticker": ticker,
+                        "prix": pos["current_price"],
+                        "pnl": round(pos["unrealized_pl"], 2),
+                        "pnl_pct": round(pos["unrealized_plpc"], 2),
+                        "raison": raison,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+                    self.logger.info(f"[AUTO] {ticker} — {raison}")
 
-    # ── Analyse d'un actif et décision ────────────────────────────────────────
     def _analyser_actif(self, ticker: str, positions: dict, compte: dict) -> dict:
-        """
-        Pipeline complet pour un actif : données → technique → sentiment → décision.
-        Retourne un dict de décision enrichi.
-        """
-        decision = {
-            "ticker":              ticker,
-            "action_executee":     "AUCUNE",
-            "signal_technique":    "HOLD",
-            "score_sentiment":     0.55,
-            "resume_sentiment":    "",
-            "raison_technique":    "",
-            "raison_finale":       "",
-            "prix":                None,
-            "rsi":                 None,
-            "sma_court":           None,
-            "sma_long":            None,
-            "timestamp":           datetime.now(timezone.utc).isoformat(),
+        base = {
+            "ticker": ticker, "action_executee": "AUCUNE",
+            "score_technique": 50, "score_sentiment": 0.55,
+            "score_fusionne": 50, "conviction": "FAIBLE",
+            "signal_technique": "HOLD", "biais_groq": "neutre",
+            "croisement_hma": False, "prix": None,
+            "rsi": None, "atr_pct": None, "indicateurs": {},
+            "raison": "",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-        # ── 1. Données OHLC ──────────────────────────────────────────────────
-        try:
-            barres = self.alpaca.get_barres(ticker)
-        except Exception as e:
-            decision["raison_finale"] = f"Erreur données OHLC : {e}"
-            return decision
+        # ── 1. Données OHLC via SDK Alpaca ────────────────────────────────
+        df = self.alpaca.get_barres(ticker)
+        if df.empty or len(df) < 50:
+            base["raison"] = "Données OHLC insuffisantes"
+            return base
 
-        if len(barres) < 20:
-            decision["raison_finale"] = "Pas assez de barres (marché fermé ?)"
-            return decision
-
-        # ── 2. Analyse technique ─────────────────────────────────────────────
-        tech = self.technique.analyser(ticker, barres)
-        decision.update({
+        # ── 2. Indicateurs pandas-ta (HMA, EMA100, RSI, MACD, BB, ADX) ──
+        tech = self.indicateurs.calculer(ticker, df)
+        base.update({
             "signal_technique": tech["signal"],
-            "raison_technique": tech["raison"],
+            "score_technique":  tech["score"],
             "prix":             tech["prix"],
-            "rsi":              tech["rsi"],
-            "sma_court":        tech["sma_court"],
-            "sma_long":         tech["sma_long"],
+            "croisement_hma":   tech["croisement_hma"],
+            "rsi":              tech["indicateurs"].get("rsi"),
+            "atr_pct":          tech["indicateurs"].get("atr_pct"),
+            "indicateurs":      tech["indicateurs"],
         })
 
-        # ── 3. Score de sentiment (uniquement si signal non HOLD) ────────────
-        sent = {"score": 0.55, "resume": "Non analysé (signal HOLD)"}
-        if tech["signal"] in ("BUY", "SELL"):
-            sent = self.sentiment.scorer(ticker, tech["prix"], tech["rsi"])
-        decision["score_sentiment"]  = sent["score"]
-        decision["resume_sentiment"] = sent["resume"]
+        # ── 3. Sentiment Groq (si signal pertinent) ────────────────────
+        sent = {"score": 0.55, "resume": "Non analysé",
+                "biais": "neutre", "facteurs_positifs": [],
+                "facteurs_negatifs": [], "source": "skip"}
 
-        # ── 4. Logique de décision finale ────────────────────────────────────
-        dans_position = ticker in positions
+        if tech["signal"] in ("BUY", "SELL") or ticker in positions:
+            sent = self.sentiment.scorer(
+                ticker, tech["prix"] or 0,
+                tech["score"],
+                tech["indicateurs"].get("rsi"),
+                tech["indicateurs"].get("hma_signal"),
+                tech["indicateurs"].get("atr_pct"),
+            )
 
-        if tech["signal"] == "BUY" and not dans_position:
-            # Filtre sentiment : achat uniquement si marché > 50% optimiste
-            if sent["score"] < SEUIL_SENTIMENT_ACHAT:
-                decision["raison_finale"] = (
-                    f"Signal BUY bloqué : sentiment trop bas ({sent['score']:.2f} < {SEUIL_SENTIMENT_ACHAT})"
-                )
-            elif self.pause_drawdown:
-                decision["raison_finale"] = "Pause forcée (drawdown max atteint)"
-            elif not self.risque.positions_disponibles(len(positions)):
-                decision["raison_finale"] = f"Max positions atteint ({MAX_POSITIONS})"
-            elif not self.risque.capital_suffisant(compte):
-                decision["raison_finale"] = "Capital insuffisant"
+        base["score_sentiment"]    = sent["score"]
+        base["biais_groq"]         = sent.get("biais", "neutre")
+        base["resume_groq"]        = sent.get("resume", "")
+        base["facteurs_positifs"]  = sent.get("facteurs_positifs", [])
+        base["facteurs_negatifs"]  = sent.get("facteurs_negatifs", [])
+
+        # ── 4. Décision fusionnée ─────────────────────────────────────────
+        dec = self.decision.decider(tech, sent, ticker in positions)
+        base.update({
+            "score_fusionne": dec["score_fusionne"],
+            "conviction":     dec["conviction"],
+            "raison":         dec["raison"],
+        })
+
+        # ── 5. Exécution ──────────────────────────────────────────────────
+        if dec["action"] == "ACHAT" and not self.pause_drawdown:
+            if not self.risque.positions_disponibles(len(positions)):
+                base["raison"] = f"Max {MAX_POSITIONS} positions atteint"
+            elif not self.risque.secteur_ok(ticker, positions):
+                base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
             else:
-                # ── ACHAT ────────────────────────────────────────────────────
-                try:
-                    ordre = self.alpaca.acheter_market(ticker, ALLOCATION_PAR_TRADE)
-                    decision["action_executee"] = "ACHAT"
-                    decision["raison_finale"]   = (
-                        f"BUY validé : {tech['raison']} | sentiment {sent['score']:.2f}"
-                    )
-                    trade = {
-                        "type":      "ACHAT",
-                        "ticker":    ticker,
-                        "montant":   ALLOCATION_PAR_TRADE,
-                        "prix":      tech["prix"],
-                        "rsi":       tech["rsi"],
-                        "sentiment": sent["score"],
-                        "ordre_id":  ordre.get("id", ""),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    self.historique_trades.append(trade)
-                    self.logger.info(
-                        f"[ACHAT] {ticker} @ ${tech['prix']:.2f} | "
-                        f"RSI {tech['rsi']:.1f} | sentiment {sent['score']:.2f}"
-                    )
-                except Exception as e:
-                    decision["raison_finale"] = f"Erreur ordre achat : {e}"
-                    self.logger.error(f"Erreur achat {ticker} : {e}")
+                montant = self.risque.allocation(
+                    dec["conviction"], tech["indicateurs"].get("atr_pct"))
+                if not self.risque.capital_suffisant(compte, montant):
+                    base["raison"] = f"Capital insuffisant (besoin ${montant:.0f})"
+                else:
+                    try:
+                        self.alpaca.soumettre_ordre(ticker, montant, "buy")
+                        base["action_executee"] = "ACHAT"
+                        self.historique_trades.append({
+                            "type": "ACHAT", "ticker": ticker,
+                            "montant": montant, "prix": tech["prix"],
+                            "conviction": dec["conviction"],
+                            "score_fusionne": dec["score_fusionne"],
+                            "croisement_hma": dec["croisement_hma"],
+                            "sentiment": sent["score"],
+                            "rsi": tech["indicateurs"].get("rsi"),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+                        self.logger.info(
+                            f"[ACHAT] {ticker} {dec['conviction']} "
+                            f"${montant:.0f} | fused={dec['score_fusionne']:.0f} "
+                            f"sent={sent['score']:.2f} HMA={'✓' if dec['croisement_hma'] else '—'}"
+                        )
+                    except Exception as e:
+                        base["raison"] = f"Erreur ordre : {e}"
 
-        elif tech["signal"] == "SELL" and dans_position:
-            # Filtre panique : vente si signal baissier OU sentiment en panique
-            if sent["score"] < SEUIL_SENTIMENT_VENTE or tech["signal"] == "SELL":
-                try:
-                    self.alpaca.vendre_position(ticker)
-                    pos = positions[ticker]
-                    decision["action_executee"] = "VENTE"
-                    decision["raison_finale"]   = (
-                        f"SELL validé : {tech['raison']} | sentiment {sent['score']:.2f}"
-                    )
-                    trade = {
-                        "type":      "VENTE",
-                        "ticker":    ticker,
-                        "prix":      tech["prix"],
-                        "pnl":       round(pos.get("unrealized_pl", 0), 2),
-                        "pnl_pct":   round(pos.get("unrealized_plpc", 0), 2),
-                        "sentiment": sent["score"],
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    self.historique_trades.append(trade)
-                    self.logger.info(
-                        f"[VENTE] {ticker} @ ${tech['prix']:.2f} | "
-                        f"P&L {pos.get('unrealized_plpc',0):.2f}%"
-                    )
-                except Exception as e:
-                    decision["raison_finale"] = f"Erreur ordre vente : {e}"
-                    self.logger.error(f"Erreur vente {ticker} : {e}")
-            else:
-                decision["raison_finale"] = (
-                    f"SELL différé : sentiment encore élevé ({sent['score']:.2f}) "
-                    f"— attente pour maximiser le gain"
+        elif dec["action"] == "VENTE" and ticker in positions:
+            pos = positions[ticker]
+            if self.alpaca.liquider_position(ticker):
+                base["action_executee"] = "VENTE"
+                self.historique_trades.append({
+                    "type": "VENTE", "ticker": ticker,
+                    "prix": tech["prix"],
+                    "pnl": round(pos.get("unrealized_pl", 0), 2),
+                    "pnl_pct": round(pos.get("unrealized_plpc", 0), 2),
+                    "sentiment": sent["score"],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                self.logger.info(
+                    f"[VENTE] {ticker} P&L {pos.get('unrealized_plpc',0):.2f}% | {dec['raison'][:60]}"
                 )
-        else:
-            if not decision["raison_finale"]:
-                decision["raison_finale"] = tech["raison"]
 
-        return decision
+        return base
 
-    # ── Cycle principal ────────────────────────────────────────────────────────
     def run_cycle(self) -> dict:
-        """
-        Exécute un cycle complet sur tous les actifs de la liste.
-        Retourne l'état complet sérialisable en JSON.
-        """
         self.cycle += 1
-        self.logger.info(f"=== Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S UTC')} ===")
+        self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
-        # ── Récupération de l'état du compte et des positions ────────────────
         try:
             compte    = self.alpaca.get_compte()
             positions = self.alpaca.get_positions()
         except Exception as e:
-            self.logger.error(f"Erreur connexion Alpaca : {e}")
-            return self._etat_erreur(str(e))
+            self.logger.error(f"Erreur Alpaca SDK: {e}")
+            return {"meta": {"cycle": self.cycle, "erreur": str(e)},
+                    "portefeuille": {}, "decisions_cycle": []}
 
-        # ── Vérification drawdown (sécurité absolue) ─────────────────────────
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
-
-        # ── Audit stop-loss / take-profit sur positions existantes ───────────
         self._auditer_positions(positions)
 
-        # ── Analyse de chaque actif ──────────────────────────────────────────
         decisions = []
-        for ticker in ACTIFS:
-            # Petite pause pour éviter le rate-limiting Alpaca
+        for ticker in ACTIFS_TOUS:
             time.sleep(0.3)
             d = self._analyser_actif(ticker, positions, compte)
             decisions.append(d)
-            if d["action_executee"] != "AUCUNE":
-                self.logger.info(
-                    f"  → {d['action_executee']} {ticker} | {d['raison_finale']}"
-                )
 
-        # ── Snapshot de la valeur du portefeuille ────────────────────────────
         self.historique_valeur.append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "equity":    compte["equity"],
-            "cash":      compte["cash"],
+            "equity": compte["equity"], "cash": compte["cash"],
         })
         self.historique_valeur = self.historique_valeur[-100:]
-        self.historique_trades = self.historique_trades[-50:]
+        self.historique_trades = self.historique_trades[-60:]
 
-        # Re-lecture des positions après les ordres du cycle
         try:
             positions_apres = self.alpaca.get_positions()
         except Exception:
             positions_apres = positions
 
-        pnl_total     = compte["equity"] - self.risque.capital_initial
-        pnl_total_pct = (pnl_total / self.risque.capital_initial) * 100
+        pnl     = compte["equity"] - self.risque.capital_initial
+        pnl_pct = pnl / self.risque.capital_initial * 100
 
-        etat = {
+        achats  = sum(1 for d in decisions if d["action_executee"] == "ACHAT")
+        ventes  = sum(1 for d in decisions if d["action_executee"] == "VENTE")
+        hma_cross = sum(1 for d in decisions if d.get("croisement_hma"))
+
+        self.logger.info(
+            f"Cycle #{self.cycle} | ${compte['equity']:,.2f} | "
+            f"P&L {pnl:+,.2f}$ ({pnl_pct:+.2f}%) | "
+            f"Pos {len(positions_apres)}/{MAX_POSITIONS} | "
+            f"Achats {achats} Ventes {ventes} | HMA cross {hma_cross}"
+        )
+
+        return {
             "meta": {
-                "cycle":       self.cycle,
-                "timestamp":   datetime.now(timezone.utc).isoformat(),
-                "bot_version": "2.0.0-route",
-                "broker":      "Alpaca Paper Trading",
-                "mode":        "PAPER",
-                "pause_drawdown": self.pause_drawdown,
+                "cycle":           self.cycle,
+                "timestamp":       datetime.now(timezone.utc).isoformat(),
+                "bot_version":     "4.0.0-route",
+                "broker":          "Alpaca Trade API v2",
+                "mode":            "PAPER",
+                "sentiment_engine":"Groq Cloud llama-3.3-70b",
+                "pause_drawdown":  self.pause_drawdown,
             },
             "portefeuille": {
-                "capital_initial":    self.risque.capital_initial,
-                "equity":             round(compte["equity"], 2),
-                "cash":               round(compte["cash"], 2),
-                "buying_power":       round(compte["buying_power"], 2),
-                "pnl_total":          round(pnl_total, 2),
-                "pnl_total_pct":      round(pnl_total_pct, 2),
-                "positions":          positions_apres,
-                "nb_positions":       len(positions_apres),
-                "historique_trades":  self.historique_trades,
-                "historique_valeur":  self.historique_valeur,
+                "capital_initial":   self.risque.capital_initial,
+                "equity":            round(compte["equity"], 2),
+                "cash":              round(compte["cash"], 2),
+                "buying_power":      round(compte["buying_power"], 2),
+                "pnl_total":         round(pnl, 2),
+                "pnl_total_pct":     round(pnl_pct, 2),
+                "positions":         positions_apres,
+                "nb_positions":      len(positions_apres),
+                "historique_trades": self.historique_trades,
+                "historique_valeur": self.historique_valeur,
             },
             "decisions_cycle": decisions,
             "config": {
-                "stop_loss_pct":    STOP_LOSS_PCT * 100,
-                "take_profit_pct":  TAKE_PROFIT_PCT * 100,
-                "max_positions":    MAX_POSITIONS,
-                "allocation_trade": ALLOCATION_PAR_TRADE,
-                "seuil_sentiment":  SEUIL_SENTIMENT_ACHAT,
-                "nb_actifs":        len(ACTIFS),
+                "stop_loss_pct":      STOP_LOSS_PCT * 100,
+                "take_profit_pct":    TAKE_PROFIT_PCT * 100,
+                "trailing_stop_pct":  TRAILING_STOP_PCT * 100,
+                "max_positions":      MAX_POSITIONS,
+                "allocation_base":    ALLOCATION_BASE,
+                "seuil_sentiment":    SEUIL_SENTIMENT_BUY,
+                "nb_actifs":          len(ACTIFS_TOUS),
+                "indicateurs":        list(POIDS.keys()),
+                "sentiment_modele":   AnalyseurSentimentGroq.MODELE,
             },
-        }
-
-        # Résumé console
-        achats  = sum(1 for d in decisions if d["action_executee"] == "ACHAT")
-        ventes  = sum(1 for d in decisions if d["action_executee"] == "VENTE")
-        self.logger.info(
-            f"Cycle #{self.cycle} terminé | "
-            f"Equity : ${compte['equity']:,.2f} | "
-            f"P&L : {'+' if pnl_total>=0 else ''}{pnl_total:,.2f}$ ({pnl_total_pct:+.2f}%) | "
-            f"Achats : {achats} | Ventes : {ventes} | "
-            f"Positions : {len(positions_apres)}/{MAX_POSITIONS}"
-        )
-        return etat
-
-    def _etat_erreur(self, message: str) -> dict:
-        return {
-            "meta": {
-                "cycle": self.cycle,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "erreur": message,
-            },
-            "portefeuille": {},
-            "decisions_cycle": [],
         }
 
 
 # =============================================================================
-# [MODULE 7] POINT D'ENTRÉE — Boucle infinie production
+# [MODULE 8] POINT D'ENTRÉE
 # =============================================================================
 
-def configurer_logging():
+def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-
-
-def exporter_json(etat: dict, chemin: Path) -> bool:
-    """Écriture atomique du JSON (tmp → rename) pour éviter les lectures partielles."""
-    tmp = chemin.with_suffix(".tmp")
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(etat, f, ensure_ascii=False, indent=2, default=str)
-        tmp.replace(chemin)
-        return True
-    except Exception as e:
-        logging.error(f"Export JSON échoué : {e}")
-        if tmp.exists():
-            tmp.unlink()
-        return False
-
-
-def main():
-    configurer_logging()
     logger = logging.getLogger("main")
 
-    logger.info("🚀 Bot Route v2 — Alpaca Paper Trading")
-    logger.info(f"   Broker        : {ALPACA_BASE_URL}")
-    logger.info(f"   Actifs suivis : {len(ACTIFS)}")
-    logger.info(f"   Intervalle    : {INTERVALLE}s")
-    logger.info(f"   Stop-loss     : {STOP_LOSS_PCT*100:.0f}% | Take-profit : {TAKE_PROFIT_PCT*100:.0f}%")
-    logger.info(f"   Max positions : {MAX_POSITIONS} × {ALLOCATION_PAR_TRADE:.0f}$")
+    logger.info("🚀 Bot Route v4 — alpaca-trade-api + pandas-ta + Groq Cloud")
+    logger.info(f"   Actifs    : {len(ACTIFS_TOUS)} ({len(ACTIFS_ACTIONS)} actions + {len(ACTIFS_CRYPTO)} crypto)")
+    logger.info(f"   Indicateurs : HMA({HMA_PERIODE}) EMA({EMA_TENDANCE}) MACD RSI BB ADX Volume")
+    logger.info(f"   Sentiment : Groq Cloud ({AnalyseurSentimentGroq.MODELE})")
+    logger.info(f"   Stops : SL {STOP_LOSS_PCT*100:.0f}% / TP {TAKE_PROFIT_PCT*100:.0f}% / Trail {TRAILING_STOP_PCT*100:.0f}%")
 
     if not ALPACA_API_KEY:
-        logger.error("❌  ALPACA_API_KEY non défini — arrêt")
+        logger.error("ALPACA_API_KEY manquant — arrêt")
         sys.exit(1)
 
     bot      = BotRoute()
@@ -909,7 +1127,7 @@ def main():
 
     def stopper(sig, frame):
         nonlocal en_cours
-        logger.info(f"Signal {sig} reçu — arrêt propre...")
+        logger.info(f"Signal {sig} — arrêt propre…")
         en_cours = False
 
     signal.signal(signal.SIGINT,  stopper)
@@ -917,19 +1135,20 @@ def main():
 
     while en_cours:
         try:
-            etat   = bot.run_cycle()
-            succes = exporter_json(etat, JSON_SORTIE)
-            logger.info(f"Export JSON : {'✓' if succes else '✗'} → {JSON_SORTIE}")
+            etat = bot.run_cycle()
+            tmp  = JSON_SORTIE.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(etat, f, ensure_ascii=False, indent=2, default=str)
+            tmp.replace(JSON_SORTIE)
+            logger.info(f"✓ Export → {JSON_SORTIE}")
         except Exception as e:
-            logger.error(f"Erreur critique cycle : {e}", exc_info=True)
-
-        # Attente interruptible par signal
+            logger.error(f"Erreur cycle : {e}", exc_info=True)
         for _ in range(INTERVALLE):
             if not en_cours:
                 break
             time.sleep(1)
 
-    logger.info("Bot arrêté proprement.")
+    logger.info("Bot arrêté.")
 
 
 if __name__ == "__main__":

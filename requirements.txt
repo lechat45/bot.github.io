@@ -1,28 +1,79 @@
-# requirements.txt
 # =============================================================================
-# Dépendances du bot Route v2 — Trading Algorithmique Alpaca
+# requirements.txt — Bot Route v4
+# alpaca-trade-api + pandas-ta + Groq Cloud
 # =============================================================================
 #
-# Modules EXTERNES (à installer via pip) :
+# DÉPENDANCES EXTERNES (pip install -r requirements.txt) :
 #
-#   requests>=2.31.0
-#       → Tous les appels HTTP vers Alpaca (ordres, barres OHLC, positions, compte)
-#       → Tous les appels HTTP vers l'API Anthropic (analyse de sentiment Claude)
-#       → Rôle : seule dépendance externe — le reste est bibliothèque standard Python
+#   alpaca-trade-api >= 3.0.0
+#       → SDK officiel Alpaca — utilisé exactement comme le code fourni :
+#           tradeapi.REST(KEY, SECRET, URL, api_version='v2')
+#           api.get_bars(symbol, TimeFrame.Hour, limit=N)
+#           api.get_crypto_bars(symbol, TimeFrame.Hour) — pour BTC/USD, ETH/USD
+#           api.submit_order(symbol, notional, side, type, time_in_force)
+#           api.close_position(symbol) — liquidation stop-loss/take-profit
+#           api.list_positions() — positions ouvertes et P&L
+#           api.get_account() — equity, cash, buying_power
+#       → Rôle : interface officielle broker — plus stable que les appels REST bruts
 #
-# Modules STDLIB utilisés (inclus dans Python 3.11, pas à installer) :
+#   pandas-ta >= 0.3.14b
+#       → Calcul vectoriel de tous les indicateurs techniques sur DataFrame :
+#           ta.hma(close, length=10)          — Hull MA vitesse (code fourni)
+#           ta.ema(close, length=100)         — Tendance longue (code fourni)
+#           ta.ema(close, length=9/21)        — Croisement court terme
+#           ta.macd(close, fast=12, slow=26)  — Momentum MACD
+#           ta.rsi(close, length=14)          — Sur-achat/sur-vente
+#           ta.bbands(close, length=20, std=2)— Bollinger Bands
+#           ta.adx(high, low, close, 14)      — Force de tendance
+#           ta.atr(high, low, close, 14)      — Volatilité pour stops dynamiques
+#           ta.sma(volume, length=20)         — Volume moyen pour spike detection
+#       → Rôle : moteur de calcul technique — vectoriel, précis, maintenable
 #
-#   json       → sérialisation/désérialisation du fichier data/etat_bot.json
-#   time       → pauses entre cycles et rate-limiting Alpaca
-#   os         → lecture des variables d'environnement (clés API via GitHub Secrets)
-#   signal     → capture SIGINT/SIGTERM pour arrêt propre sans ordre orphelin
-#   sys        → sortie propre et vérification des imports
-#   logging    → journal horodaté de chaque décision, ordre et erreur
-#   math       → calculs RSI et SMA (abs, min, max, sum)
-#   datetime   → horodatage UTC de chaque trade et snapshot de portefeuille
-#   pathlib    → manipulation de chemins cross-plateforme (data/etat_bot.json)
-#   typing     → annotations Optional, Dict, List pour lisibilité du code
+#   pandas >= 1.5.0
+#       → DataFrame requis par pandas-ta et alpaca-trade-api
+#       → Manipulation des séries OHLCV retournées par le SDK Alpaca
+#       → Rôle : structure de données centrale pour l'analyse technique
 #
+#   numpy >= 1.24.0
+#       → Dépendance de pandas et pandas-ta
+#       → Calculs numériques vectoriels (score composite, ATR, etc.)
+#       → Rôle : couche de calcul bas niveau
+#
+#   requests >= 2.31.0
+#       → Appels HTTP vers Groq Cloud pour l'analyse de sentiment :
+#           POST https://api.groq.com/openai/v1/chat/completions
+#           Modèle : llama-3.3-70b-versatile (rapide, gratuit sur console.groq.com)
+#       → Rôle : seul appel HTTP manuel — tout le reste passe par les SDK
+#
+# =============================================================================
+# MODULES STDLIB UTILISÉS (Python 3.11, rien à installer) :
+#
+#   json     → export data/etat_bot.json pour le dashboard HTML
+#   time     → pauses entre cycles, cache sentiment 3 min
+#   os       → lecture des variables d'environnement (GitHub Secrets)
+#   signal   → capture SIGINT/SIGTERM pour arrêt propre
+#   sys      → sortie propre, vérification imports
+#   logging  → journal horodaté de chaque décision et ordre
+#   math     → score composite, calculs de risque
+#   datetime → horodatage UTC des trades et snapshots
+#   pathlib  → chemins cross-plateforme (data/etat_bot.json)
+#   typing   → annotations Optional, Dict, List
+#
+# =============================================================================
+# INSTALLATION :
+#   pip install -r requirements.txt
+#
+# VÉRIFICATION :
+#   python -c "import alpaca_trade_api, pandas_ta, pandas, requests; print('OK')"
+#
+# SECRETS GITHUB REQUIS (Settings → Secrets → Actions) :
+#   ALPACA_API_KEY      → app.alpaca.markets (RÉGÉNÉRER la clé exposée !)
+#   ALPACA_SECRET_KEY   → app.alpaca.markets
+#   GROQ_API_KEY        → console.groq.com (gratuit, rapide)
 # =============================================================================
 
+alpaca-trade-api>=3.0.0
+pandas-ta>=0.3.14b
+pandas>=1.5.0
+numpy>=1.24.0
 requests>=2.31.0

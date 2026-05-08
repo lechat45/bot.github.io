@@ -1,82 +1,85 @@
 # =============================================================================
-# .github/workflows/bot_route.yml — Pipeline GitHub Actions du bot Route v2
+# .github/workflows/bot_route.yml — Pipeline GitHub Actions du bot Route v4
 # =============================================================================
 #
 # MODULES & RÔLES :
 #
 #   [MODULE 1] Déclencheurs (on:)
-#       → schedule        : Toutes les 5 minutes via cron (minimum GitHub Actions)
-#       → push/main       : Relance immédiate à chaque commit — pratique pour déboguer
-#       → workflow_dispatch: Déclenchement manuel depuis l'onglet "Actions" de GitHub
-#       → Rôle : définit QUAND le workflow s'exécute et avec quels paramètres
+#       → schedule : Cron toutes les 5 minutes (minimum GitHub Actions)
+#         Le bot tourne 4 min par run → couverture quasi-continue
+#       → push/main : Relance immédiate à chaque commit — pour déboguer
+#       → workflow_dispatch : Déclenchement manuel avec paramètres
+#       → Rôle : définit QUAND le workflow s'exécute
 #
 #   [MODULE 2] Job principal (jobs.run-bot)
-#       → runs-on ubuntu-latest : VM Linux gratuite GitHub, Python préinstallé
-#       → permissions contents+pages+id-token : nécessaire pour commit JSON et Pages
-#       → Rôle : conteneur d'exécution — environnement dans lequel Python tourne
+#       → runs-on ubuntu-latest : VM Linux gratuite avec Python 3.11
+#       → permissions write : commit JSON + déploiement GitHub Pages
+#       → concurrency : empêche deux runs parallèles (conflits git)
+#       → Rôle : conteneur d'exécution sécurisé
 #
 #   [MODULE 3] Configuration environnement (steps 1-3)
-#       → actions/checkout : clone le repo dans la VM avec historique git complet
-#       → actions/setup-python : installe Python 3.11 avec cache pip (accélère)
-#       → pip install : installe requests (seule dépendance externe du bot)
-#       → Rôle : prépare la VM pour lancer bot_route.py proprement
+#       → actions/checkout : clone le repo avec historique git
+#       → actions/setup-python : Python 3.11 avec cache pip
+#       → pip install : alpaca-trade-api, pandas-ta, pandas, requests
+#       → Rôle : prépare la VM pour lancer bot_route.py
 #
 #   [MODULE 4] Exécution du bot (step 4)
-#       → Timeout 4 minutes (< cron 5 min) pour garantir une fin propre
-#       → Variables d'environnement injectées depuis GitHub Secrets (jamais en clair)
-#       → ALPACA_API_KEY, ALPACA_SECRET_KEY, ANTHROPIC_API_KEY lus par Python via os.environ
-#       → Affiche un résumé JSON à la fin du run pour diagnostic rapide
-#       → Rôle : cœur du workflow — fait réellement tourner le bot de trading
+#       → Timeout 4 minutes (< cron 5 min) pour fin propre garantie
+#       → Secrets GitHub injectés comme variables d'environnement :
+#           ALPACA_API_KEY    → clé API Alpaca Paper Trading
+#           ALPACA_SECRET_KEY → secret Alpaca
+#           GROQ_API_KEY      → clé Groq Cloud (console.groq.com)
+#       → Vérifie la présence des secrets avant de lancer le bot
+#       → Affiche un résumé JSON en fin de run pour diagnostic
+#       → Rôle : cœur du workflow — fait tourner le bot de trading
 #
 #   [MODULE 5] Publication dashboard (steps 5-7)
-#       → Commit data/etat_bot.json dans le repo après chaque run
+#       → Commit atomique de data/etat_bot.json dans le repo
 #       → Copie dashboard.html + data/ dans _site/ pour GitHub Pages
-#       → Upload + déploiement sur Pages → URL publique https://<user>.github.io/<repo>/
-#       → Résumé markdown dans l'onglet Actions pour diagnostic visuel
-#       → Rôle : rend le dashboard HTML accessible en ligne sans serveur externe
+#       → Upload artefact + déploiement Pages → URL publique
+#       → Résumé markdown dans l'onglet Actions de GitHub
+#       → Rôle : dashboard accessible en ligne après chaque cycle
 #
 # =============================================================================
 # PRÉREQUIS — À configurer UNE SEULE FOIS dans GitHub :
 #
-#   1. Settings > Secrets and variables > Actions > New repository secret :
-#        ALPACA_API_KEY     → Ta clé API Alpaca (régénérée sur app.alpaca.markets)
-#        ALPACA_SECRET_KEY  → Ton secret Alpaca
-#        ANTHROPIC_API_KEY  → Ta clé Anthropic (optionnel — sentiment neutre si absent)
+#   Settings → Secrets and variables → Actions → New repository secret :
+#     ALPACA_API_KEY      → Nouvelle clé (régénérée sur app.alpaca.markets)
+#     ALPACA_SECRET_KEY   → Nouveau secret Alpaca
+#     GROQ_API_KEY        → Clé Groq Cloud (console.groq.com — gratuit)
 #
-#   2. Settings > Actions > General > Workflow permissions :
-#        ✓ Read and write permissions
-#        ✓ Allow GitHub Actions to create and approve pull requests
+#   Settings → Actions → General → Workflow permissions :
+#     ✓ Read and write permissions
+#     ✓ Allow GitHub Actions to create and approve pull requests
 #
-#   3. Settings > Pages > Source : "GitHub Actions"
+#   Settings → Pages → Source : "GitHub Actions"
 #
+# URL dashboard : https://<username>.github.io/<repo-name>/
 # =============================================================================
 
-name: "📈 Bot Route — Trading Algorithmique Continu"
+name: "📈 Route v4 — Alpaca SDK + pandas-ta + Groq Cloud"
 
 # ------------------------------------------------------------------
 # [MODULE 1] DÉCLENCHEURS
 # ------------------------------------------------------------------
 on:
   schedule:
-    # Toutes les 5 minutes (minimum autorisé par GitHub Actions)
-    # Le bot tourne 4 min par run → couverture quasi-continue
-    - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *"   # Toutes les 5 minutes
 
   push:
     branches: [ "main", "master" ]
+    paths:
+      - "bot_route.py"
+      - "requirements.txt"
+      - ".github/workflows/bot_route.yml"
 
   workflow_dispatch:
     inputs:
       intervalle:
-        description: "Secondes entre deux cycles d'analyse"
+        description: "Secondes entre deux cycles (défaut : 20)"
         required: false
         default: "20"
         type: string
-      activer_sentiment:
-        description: "Activer l'analyse de sentiment IA"
-        required: false
-        default: "true"
-        type: boolean
 
 
 # ------------------------------------------------------------------
@@ -84,13 +87,18 @@ on:
 # ------------------------------------------------------------------
 jobs:
   run-bot:
-    name: "Cycle trading + déploiement dashboard"
+    name: "Route v4 — Cycle trading + Dashboard"
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # Commit du JSON mis à jour dans le repo
-      pages: write      # Publication sur GitHub Pages
-      id-token: write   # Authentification OIDC pour Pages
+      contents: write
+      pages: write
+      id-token: write
+
+    # Empêche les runs parallèles qui créeraient des conflits git
+    concurrency:
+      group: "route-v4"
+      cancel-in-progress: false
 
     steps:
 
@@ -101,95 +109,125 @@ jobs:
     - name: "📥 Checkout du dépôt"
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0   # Historique complet pour les commits ultérieurs
+        fetch-depth: 0
 
     - name: "🐍 Setup Python 3.11"
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
-        cache: "pip"     # Cache ~/.cache/pip → accélère les runs suivants
+        cache: "pip"
+        cache-dependency-path: "requirements.txt"
 
     - name: "📦 Installation des dépendances"
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip --quiet
+        pip install -r requirements.txt --quiet
         echo "✅ Dépendances installées :"
-        pip list | grep -E "requests|anthropic"
+        pip list | grep -iE "alpaca|pandas|requests|numpy"
 
     # --------------------------------------------------------------
-    # [MODULE 4] EXÉCUTION DU BOT
-    # Les secrets GitHub sont injectés comme variables d'environnement
-    # Python les lit via os.environ.get() — jamais écrits en dur
+    # [MODULE 4] EXÉCUTION DU BOT ROUTE v4
+    # Secrets → variables d'environnement → lus par os.environ
+    # JAMAIS écrits en dur dans le code source
     # --------------------------------------------------------------
 
-    - name: "🤖 Exécution du bot Route"
+    - name: "🤖 Exécution du bot Route v4"
       timeout-minutes: 4
       env:
-        # Secrets Alpaca — à définir dans Settings > Secrets > Actions
+        # ── Secrets broker ─────────────────────────────────────────
         ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
         ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-        ALPACA_BASE_URL:   "https://paper-api.alpaca.markets/v2"
+        ALPACA_BASE_URL:   "https://paper-api.alpaca.markets"
 
-        # Secret Anthropic pour l'analyse de sentiment (optionnel)
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # ── Secret Groq Cloud ───────────────────────────────────────
+        # Créer sur https://console.groq.com → API Keys (gratuit)
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
-        # Configuration du bot
-        BOT_INTERVAL_SEC:  ${{ github.event.inputs.intervalle || '20' }}
-        BOT_DATA_PATH:     "data/etat_bot.json"
+        # ── Configuration ───────────────────────────────────────────
+        BOT_INTERVAL_SEC: ${{ github.event.inputs.intervalle || '20' }}
+        BOT_DATA_PATH:    "data/etat_bot.json"
+        PYTHONUNBUFFERED: "1"
 
       run: |
-        echo "════════════════════════════════════════"
-        echo " Bot Route v2 — $(date -u '+%Y-%m-%d %H:%M UTC')"
-        echo "════════════════════════════════════════"
-        echo " Intervalle   : ${BOT_INTERVAL_SEC}s"
-        echo " Broker URL   : ${ALPACA_BASE_URL}"
-        echo " Sentiment IA : ${{ github.event.inputs.activer_sentiment || 'true' }}"
-        echo "════════════════════════════════════════"
+        echo "╔═══════════════════════════════════════════════╗"
+        echo "║  ROUTE/v4 — $(date -u '+%Y-%m-%d %H:%M UTC')    ║"
+        echo "╠═══════════════════════════════════════════════╣"
+        echo "║  SDK      : alpaca-trade-api v2               ║"
+        echo "║  Calculs  : pandas-ta (HMA EMA MACD RSI BB)   ║"
+        echo "║  Sentiment: Groq Cloud llama-3.3-70b          ║"
+        echo "║  Intervalle: ${BOT_INTERVAL_SEC}s / cycle                ║"
+        echo "╚═══════════════════════════════════════════════╝"
 
-        # Création du dossier data/ si absent
+        # Vérification des secrets requis
+        if [ -z "$ALPACA_API_KEY" ]; then
+          echo "❌ ALPACA_API_KEY manquant dans GitHub Secrets"
+          echo "   → Settings > Secrets and variables > Actions"
+          exit 1
+        fi
+        if [ -z "$ALPACA_SECRET_KEY" ]; then
+          echo "❌ ALPACA_SECRET_KEY manquant dans GitHub Secrets"
+          exit 1
+        fi
+        if [ -z "$GROQ_API_KEY" ]; then
+          echo "⚠️  GROQ_API_KEY absent — sentiment en mode fallback (0.55)"
+          echo "   → Obtenir gratuitement sur console.groq.com"
+        fi
+
         mkdir -p data
 
-        # Lancement — s'arrête proprement après ~4 min via SIGTERM du timeout
+        # Lancement — arrêt propre sur SIGTERM du timeout
         python bot_route.py
 
         echo ""
-        echo "════════════════════════════════════════"
+        echo "════════════════════════════════════"
         echo " Run terminé — $(date -u '+%H:%M:%S UTC')"
-        echo "════════════════════════════════════════"
+        echo "════════════════════════════════════"
 
-        # Diagnostic rapide sur le dernier état exporté
+        # Résumé du dernier état exporté
         if [ -f data/etat_bot.json ]; then
           echo ""
-          echo "📊 Résumé du portefeuille :"
+          echo "📊 Résumé portefeuille :"
           python -c "
         import json
         with open('data/etat_bot.json') as f:
             d = json.load(f)
         meta = d.get('meta', {})
         pf   = d.get('portefeuille', {})
+        cfg  = d.get('config', {})
+        decs = d.get('decisions_cycle', [])
         pnl  = pf.get('pnl_total', 0)
-        print(f\"  Cycle          : #{meta.get('cycle', 0)}\")
-        print(f\"  Equity         : \${pf.get('equity', 0):,.2f}\")
-        print(f\"  P&L total      : \${pnl:+,.2f} ({pf.get('pnl_total_pct', 0):+.2f}%)\")
-        print(f\"  Cash dispo     : \${pf.get('cash', 0):,.2f}\")
-        print(f\"  Positions      : {pf.get('nb_positions', 0)}\")
-        print(f\"  Pause drawdown : {meta.get('pause_drawdown', False)}\")
-
-        decs   = d.get('decisions_cycle', [])
-        achats = sum(1 for x in decs if x.get('action_executee')=='ACHAT')
-        ventes = sum(1 for x in decs if x.get('action_executee') in ('VENTE','VENTE_AUTO'))
-        print(f\"  Achats cycle   : {achats}\")
-        print(f\"  Ventes cycle   : {ventes}\")
+        sign = '+' if pnl >= 0 else ''
+        print(f'  Version        : {meta.get(\"bot_version\", \"?\")}')
+        print(f'  Cycle          : #{meta.get(\"cycle\", 0)}')
+        print(f'  SDK            : {meta.get(\"broker\", \"?\")}')
+        print(f'  Sentiment      : {meta.get(\"sentiment_engine\", \"?\")}')
+        print(f'  Equity         : \${pf.get(\"equity\", 0):,.2f}')
+        print(f'  P&L total      : {sign}\${pnl:,.2f} ({pf.get(\"pnl_total_pct\", 0):+.2f}%)')
+        print(f'  Cash           : \${pf.get(\"cash\", 0):,.2f}')
+        print(f'  Buying power   : \${pf.get(\"buying_power\", 0):,.2f}')
+        print(f'  Positions      : {pf.get(\"nb_positions\", 0)}/{cfg.get(\"max_positions\", 5)}')
+        print(f'  Pause drawdown : {meta.get(\"pause_drawdown\", False)}')
+        print()
+        achats   = sum(1 for x in decs if x.get('action_executee') == 'ACHAT')
+        ventes   = sum(1 for x in decs if x.get('action_executee') in ('VENTE','VENTE_AUTO'))
+        hma_x    = sum(1 for x in decs if x.get('croisement_hma'))
+        buy_sig  = sum(1 for x in decs if x.get('signal_technique') == 'BUY')
+        sell_sig = sum(1 for x in decs if x.get('signal_technique') == 'SELL')
+        print(f'  Achats cycle   : {achats}')
+        print(f'  Ventes cycle   : {ventes}')
+        print(f'  HMA crossovers : {hma_x}')
+        print(f'  Signaux BUY    : {buy_sig}')
+        print(f'  Signaux SELL   : {sell_sig}')
           "
         else
-          echo "⚠  Fichier data/etat_bot.json introuvable"
+          echo "⚠️  data/etat_bot.json introuvable après le run"
         fi
 
     # --------------------------------------------------------------
     # [MODULE 5] PUBLICATION DU DASHBOARD
     # --------------------------------------------------------------
 
-    - name: "💾 Commit des données JSON dans le repo"
+    - name: "💾 Commit des données JSON"
       run: |
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -197,21 +235,27 @@ jobs:
         git add data/etat_bot.json
 
         if git diff --cached --quiet; then
-          echo "Aucune modification — pas de commit nécessaire"
+          echo "ℹ️  Aucune modification — commit ignoré"
         else
+          CYCLE=$(python -c "
+        import json
+        try:
+            d = json.load(open('data/etat_bot.json'))
+            print(d.get('meta',{}).get('cycle', 0))
+        except:
+            print('?')
+          " 2>/dev/null)
           TS=$(date -u '+%Y-%m-%d %H:%M UTC')
-          git commit -m "📈 Route data update — ${TS}"
+          git commit -m "📈 Route v4 — cycle #${CYCLE} — ${TS}"
           git push
-          echo "✅ data/etat_bot.json commité et pushé"
+          echo "✅ Données committées (cycle #${CYCLE})"
         fi
 
-    - name: "📄 Préparation du dossier GitHub Pages"
+    - name: "📄 Préparation GitHub Pages"
       run: |
-        mkdir -p _site
-        # Index = dashboard HTML
+        mkdir -p _site _site/data
         cp dashboard.html _site/index.html
-        # Données JSON accessibles depuis le dashboard
-        cp -r data _site/data 2>/dev/null || true
+        cp data/etat_bot.json _site/data/etat_bot.json 2>/dev/null || true
         echo "Contenu _site/ :"
         ls -lh _site/
         ls -lh _site/data/ 2>/dev/null || echo "(data/ vide)"
@@ -225,19 +269,20 @@ jobs:
       id: deploy
       uses: actions/deploy-pages@v4
 
-    - name: "📊 Résumé dans l'onglet Actions"
+    - name: "📊 Résumé onglet Actions"
+      if: always()
       run: |
-        # Ce bloc écrit dans $GITHUB_STEP_SUMMARY
-        # → visible directement dans l'onglet Actions de GitHub
         {
-          echo "## 📈 Bot Route — Résumé du run"
+          echo "## 📈 Route v4 — Résumé du run"
           echo ""
           echo "| Paramètre | Valeur |"
           echo "|-----------|--------|"
           echo "| Heure | $(date -u '+%Y-%m-%d %H:%M UTC') |"
-          echo "| Intervalle cycles | ${{ github.event.inputs.intervalle || '20' }}s |"
+          echo "| SDK Broker | alpaca-trade-api v2 |"
+          echo "| Indicateurs | HMA · EMA100 · EMA9/21 · MACD · RSI · BB · ADX · Volume |"
+          echo "| Sentiment | Groq Cloud llama-3.3-70b |"
+          echo "| Intervalle | ${{ github.event.inputs.intervalle || '20' }}s |"
           echo "| Dashboard | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ |"
-          echo "| Broker | Alpaca Paper Trading |"
         } >> "$GITHUB_STEP_SUMMARY"
 
         if [ -f data/etat_bot.json ]; then
@@ -249,15 +294,17 @@ jobs:
         pf   = d.get('portefeuille', {})
         pnl  = pf.get('pnl_total', 0)
         sign = '+' if pnl >= 0 else ''
-        lines = [
-            f\"| Cycle | #{meta.get('cycle',0)} |\",
-            f\"| Equity | \${pf.get('equity',0):,.2f} |\",
-            f\"| P&L | {sign}\${pnl:,.2f} ({pf.get('pnl_total_pct',0):+.2f}%) |\",
-            f\"| Positions | {pf.get('nb_positions',0)} |\",
-            f\"| Pause drawdown | {meta.get('pause_drawdown',False)} |\",
+        decs = d.get('decisions_cycle', [])
+        hma  = sum(1 for x in decs if x.get('croisement_hma'))
+        rows = [
+            f'| Cycle | #{meta.get(\"cycle\", 0)} |',
+            f'| Equity | \${pf.get(\"equity\", 0):,.2f} |',
+            f'| P&L | {sign}\${pnl:,.2f} ({pf.get(\"pnl_total_pct\", 0):+.2f}%) |',
+            f'| Positions | {pf.get(\"nb_positions\", 0)} |',
+            f'| HMA Crossovers | {hma} |',
+            f'| Pause drawdown | {meta.get(\"pause_drawdown\", False)} |',
         ]
-        summary = os.environ['GITHUB_STEP_SUMMARY']
-        with open(summary, 'a') as f:
-            f.write('\n'.join(lines) + '\n')
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+            f.write('\n'.join(rows) + '\n')
           "
         fi
