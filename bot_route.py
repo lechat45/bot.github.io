@@ -133,7 +133,7 @@ BB_STD              = 2.0
 ADX_PERIODE         = 14
 ADX_SEUIL           = 25
 VOLUME_MULT         = 1.5
-BARRES_LIMIT        = 150   # Bougies 1h récupérées (EMA100 + marge suffisante)
+BARRES_LIMIT        = 120   # Bougies 1h récupérées (EMA100 + marge suffisante)
 
 # ── Pondération score composite (total = 100) ────────────────────────────
 POIDS = {
@@ -341,7 +341,7 @@ class MoteurIndicateurs:
         }
 
         # Minimum de barres pour calculer EMA100 + marge
-        if len(df) < 110:
+        if len(df) < 50:
             return result
 
         closes  = df["close"]
