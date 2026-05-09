@@ -653,9 +653,15 @@ class AnalyseurSentimentGroq:
       0.70–1.00 → Euphorie  : renforcer conviction
     """
 
-    GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
-    MODELE    = "llama-3.3-70b-versatile"
-    CACHE_TTL = 600   # 10 minutes — évite les appels répétés
+    GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
+    MODELE          = "llama-3.3-70b-versatile"
+    CACHE_TTL       = 600    # 10 min marché ouvert
+    CACHE_TTL_CLOSED= 3600   # 1 h marché fermé — inutile de re-demander
+    MAX_RPM         = 25     # Groq free tier = 30 RPM → on reste à 25
+
+    # Variables de classe — partagées entre toutes les instances dans le run
+    _backoff_until: float = 0.0   # timestamp fin de backoff 429
+    _recent_calls:  list  = []    # timestamps des appels < 60s
 
     def __init__(self):
         self.logger    = logging.getLogger("Groq")
@@ -668,28 +674,58 @@ class AnalyseurSentimentGroq:
                 return s
         return "AUTRES"
 
+    @classmethod
+    def _check_rate_limit(cls, now: float) -> bool:
+        """Retourne True si on peut appeler (pas en backoff, pas à la limite RPM)."""
+        if now < cls._backoff_until:
+            return False
+        cls._recent_calls = [t for t in cls._recent_calls if now - t < 60]
+        return len(cls._recent_calls) < cls.MAX_RPM
+
+    @classmethod
+    def _register_call(cls):
+        cls._recent_calls.append(time.time())
+
+    @classmethod
+    def _set_backoff(cls, seconds: float = 65.0):
+        cls._backoff_until = time.time() + seconds
+
     def scorer(self, ticker: str, prix: float,
                score_tech: float = 50,
                rsi: Optional[float] = None,
                hma_signal: Optional[str] = None,
-               atr_pct: Optional[float] = None) -> dict:
+               atr_pct: Optional[float] = None,
+               marche_ouvert: bool = True) -> dict:
         """
-        Appelle Groq Cloud pour scorer le sentiment du marché sur l'actif.
-        Cache 3 minutes, fallback 0.55 si clé absente ou erreur réseau.
+        Appelle Groq Cloud pour scorer le sentiment.
+        - Cache 10 min (ouvert) / 1 h (fermé)
+        - Rate limiter 25 RPM — backoff 65s sur 429
+        - Fallback 0.55 si clé absente, backoff actif, ou erreur
         """
-        # ── Cache ─────────────────────────────────────────────────────────
         now = time.time()
-        if ticker in self._cache and (now - self._cache_ts.get(ticker, 0)) < self.CACHE_TTL:
+        ttl = self.CACHE_TTL if marche_ouvert else self.CACHE_TTL_CLOSED
+
+        # ── Cache ─────────────────────────────────────────────────────────
+        if ticker in self._cache and (now - self._cache_ts.get(ticker, 0)) < ttl:
             return self._cache[ticker]
 
         if not GROQ_API_KEY:
-            self.logger.warning(f"GROQ_API_KEY absent — fallback neutre {ticker}")
-            return self._fallback("Clé GROQ_API_KEY non configurée")
+            return self._fallback("GROQ_API_KEY absent")
 
-        secteur   = self._secteur(ticker)
-        rsi_str   = f"RSI={rsi:.1f}" if rsi else "RSI=N/A"
-        hma_str   = f"HMA_signal={hma_signal}" if hma_signal else ""
-        atr_str   = f"ATR={atr_pct:.2f}%" if atr_pct else ""
+        # ── Rate limit / backoff ──────────────────────────────────────────
+        if not self._check_rate_limit(now):
+            reste = max(0, int(type(self)._backoff_until - now))
+            raison = (f"Backoff 429 — {reste}s restants" if reste
+                      else f"Rate limit {self.MAX_RPM} RPM — pause")
+            # Retourner le cache périmé si dispo plutôt que fallback neutre
+            if ticker in self._cache:
+                return self._cache[ticker]
+            return self._fallback(raison)
+
+        secteur = self._secteur(ticker)
+        rsi_str = f"RSI={rsi:.1f}" if rsi else "RSI=N/A"
+        hma_str = f"HMA_signal={hma_signal}" if hma_signal else ""
+        atr_str = f"ATR={atr_pct:.2f}%" if atr_pct else ""
 
         prompt = f"""Tu es un analyste quantitatif expert en psychologie de marché et trading algorithmique.
 
@@ -717,6 +753,7 @@ JSON uniquement, sans texte autour :
   "biais_court_terme": "<haussier|baissier|neutre>"}}"""
 
         try:
+            self._register_call()
             r = requests.post(
                 self.GROQ_URL,
                 headers={
@@ -748,7 +785,7 @@ JSON uniquement, sans texte autour :
                 "facteurs_positifs": data.get("facteurs_positifs", []),
                 "facteurs_negatifs": data.get("facteurs_negatifs", []),
                 "biais":             data.get("biais_court_terme", "neutre"),
-                "source":            self.MODELE,
+                "source":            "groq/" + self.MODELE,
             }
             self._cache[ticker]    = resultat
             self._cache_ts[ticker] = now
@@ -756,13 +793,160 @@ JSON uniquement, sans texte autour :
             return resultat
 
         except Exception as e:
-            self.logger.warning(f"Groq erreur {ticker}: {e}")
-            return self._fallback(str(e))
+            msg = str(e)
+            if "429" in msg:
+                self._set_backoff(65.0)
+                self.logger.warning(
+                    f"Groq 429 — backoff 65s "
+                    f"(RPM utilisés : {len(type(self)._recent_calls)}/{self.MAX_RPM})"
+                )
+            else:
+                self.logger.warning(f"Groq erreur {ticker}: {msg[:80]}")
+            if ticker in self._cache:   # Retourne cache périmé plutôt que neutre
+                return self._cache[ticker]
+            return self._fallback(msg)
 
     def _fallback(self, raison: str) -> dict:
         return {
             "score": 0.55, "confiance": 0.3,
             "resume": f"Sentiment indisponible ({raison[:60]})",
+            "facteurs_positifs": [], "facteurs_negatifs": [],
+            "biais": "neutre", "source": "fallback",
+        }
+
+
+# =============================================================================
+# [MODULE 4bis] AnalyseurSentimentGemini — Google AI Studio (fallback gratuit)
+# =============================================================================
+
+GOOGLE_AI_KEY = os.environ.get("GOOGLE_AI_KEY", "")   # console.cloud.google.com/ai
+
+class AnalyseurSentimentGemini:
+    """
+    Fallback sentiment via Google AI Studio (Gemini 2.0 Flash — gratuit).
+    Endpoint : https://generativelanguage.googleapis.com/v1beta/models/...
+    Limite   : 15 RPM / 1500 req/jour (free tier) — largement suffisant.
+    Activé uniquement si Groq renvoie un fallback ET que GOOGLE_AI_KEY est défini.
+    """
+
+    GEMINI_URL  = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.0-flash:generateContent"
+    )
+    MODELE      = "gemini-2.0-flash"
+    CACHE_TTL   = 600
+    CACHE_TTL_CLOSED = 3600
+
+    _backoff_until: float = 0.0
+    _recent_calls:  list  = []
+    MAX_RPM = 14  # Free tier = 15 RPM
+
+    def __init__(self):
+        self.logger    = logging.getLogger("Gemini")
+        self._cache    = {}
+        self._cache_ts = {}
+
+    def _secteur(self, ticker: str) -> str:
+        for s, tickers in SECTEURS.items():
+            if ticker in tickers:
+                return s
+        return "AUTRES"
+
+    @classmethod
+    def _check_rate_limit(cls, now: float) -> bool:
+        if now < cls._backoff_until:
+            return False
+        cls._recent_calls = [t for t in cls._recent_calls if now - t < 60]
+        return len(cls._recent_calls) < cls.MAX_RPM
+
+    def scorer(self, ticker: str, prix: float,
+               score_tech: float = 50,
+               rsi: Optional[float] = None,
+               hma_signal: Optional[str] = None,
+               atr_pct: Optional[float] = None,
+               marche_ouvert: bool = True) -> dict:
+        """Appelle Gemini 2.0 Flash pour le sentiment — même interface que Groq."""
+        now = time.time()
+        ttl = self.CACHE_TTL if marche_ouvert else self.CACHE_TTL_CLOSED
+
+        if ticker in self._cache and (now - self._cache_ts.get(ticker, 0)) < ttl:
+            return self._cache[ticker]
+
+        if not GOOGLE_AI_KEY:
+            return self._fallback("GOOGLE_AI_KEY absent")
+
+        if not self._check_rate_limit(now):
+            if ticker in self._cache:
+                return self._cache[ticker]
+            return self._fallback("Gemini rate limit")
+
+        secteur = self._secteur(ticker)
+        rsi_str = f"RSI={rsi:.1f}" if rsi else "RSI=N/A"
+        hma_str = f"HMA={hma_signal}" if hma_signal else ""
+        atr_str = f"ATR={atr_pct:.2f}%" if atr_pct else ""
+
+        prompt = f"""Tu es un analyste quantitatif expert en trading algorithmique.
+
+Ticker: {ticker} | Secteur: {secteur} | Prix: ${prix:.4f}
+{rsi_str} | {hma_str} | {atr_str} | Score technique: {score_tech:.0f}/100
+
+Évalue le sentiment de marché pour {ticker} (contexte macro, psychologie, secteur).
+
+Réponds UNIQUEMENT en JSON valide :
+{{"score": <float 0.0-1.0>, "confiance": <float 0.0-1.0>, "resume": "<phrase>",
+  "facteurs_positifs": ["<f1>"], "facteurs_negatifs": ["<f1>"],
+  "biais_court_terme": "<haussier|baissier|neutre>"}}"""
+
+        try:
+            type(self)._recent_calls.append(now)
+            r = requests.post(
+                self.GEMINI_URL,
+                params={"key": GOOGLE_AI_KEY},
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "systemInstruction": {
+                        "parts": [{"text": "Expert en sentiment financier. JSON uniquement."}]
+                    },
+                    "generationConfig": {"temperature": 0.25, "maxOutputTokens": 350},
+                },
+                timeout=10,
+            )
+            r.raise_for_status()
+            texte = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            texte = texte.replace("```json", "").replace("```", "").strip()
+            data  = json.loads(texte)
+
+            score    = float(max(0.0, min(1.0, data.get("score", 0.55))))
+            resultat = {
+                "score":             round(score, 3),
+                "confiance":         float(data.get("confiance", 0.5)),
+                "resume":            str(data.get("resume", "")),
+                "facteurs_positifs": data.get("facteurs_positifs", []),
+                "facteurs_negatifs": data.get("facteurs_negatifs", []),
+                "biais":             data.get("biais_court_terme", "neutre"),
+                "source":            "gemini/" + self.MODELE,
+            }
+            self._cache[ticker]    = resultat
+            self._cache_ts[ticker] = now
+            self.logger.info(f"Gemini {ticker}: score={score:.3f} biais={resultat['biais']}")
+            return resultat
+
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                type(self)._backoff_until = time.time() + 65
+                self.logger.warning("Gemini 429 — backoff 65s")
+            else:
+                self.logger.warning(f"Gemini erreur {ticker}: {msg[:80]}")
+            if ticker in self._cache:
+                return self._cache[ticker]
+            return self._fallback(msg)
+
+    def _fallback(self, raison: str) -> dict:
+        return {
+            "score": 0.55, "confiance": 0.3,
+            "resume": f"Gemini indisponible ({raison[:60]})",
             "facteurs_positifs": [], "facteurs_negatifs": [],
             "biais": "neutre", "source": "fallback",
         }
@@ -1156,6 +1340,7 @@ class BotRoute:
         self.alpaca      = AlpacaClientV2()
         self.indicateurs = MoteurIndicateurs()
         self.sentiment   = AnalyseurSentimentGroq()
+        self.gemini      = AnalyseurSentimentGemini()
         self.risque      = GestionnaireRisque()
         self.decision    = ScoreDecisionIA()
         self.discord     = NotificateurDiscord()
@@ -1641,7 +1826,18 @@ class BotRoute:
                 tech["indicateurs"].get("rsi"),
                 tech["indicateurs"].get("hma_signal"),
                 tech["indicateurs"].get("atr_pct"),
+                marche_ouvert=executer,
             )
+            # Fallback Gemini si Groq indisponible (429 ou backoff)
+            if sent["source"] == "fallback" and GOOGLE_AI_KEY:
+                sent = self.gemini.scorer(
+                    ticker, tech["prix"] or 0,
+                    tech["score"],
+                    tech["indicateurs"].get("rsi"),
+                    tech["indicateurs"].get("hma_signal"),
+                    tech["indicateurs"].get("atr_pct"),
+                    marche_ouvert=executer,
+                )
 
         base["score_sentiment"]    = sent["score"]
         base["biais_groq"]         = sent.get("biais", "neutre")
