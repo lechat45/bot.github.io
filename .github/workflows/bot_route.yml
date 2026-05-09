@@ -90,6 +90,11 @@ jobs:
     name: "Route v4 — Cycle trading + Dashboard"
     runs-on: ubuntu-latest
 
+    # Requis par actions/deploy-pages@v4
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
     permissions:
       contents: write
       pages: write
@@ -142,6 +147,10 @@ jobs:
         # ── Secret Groq Cloud ───────────────────────────────────────
         # Créer sur https://console.groq.com → API Keys (gratuit)
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+        # ── Google AI Studio — fallback si Groq rate-limité ─────────
+        # Clé gratuite sur https://aistudio.google.com/apikey
+        GOOGLE_AI_KEY: ${{ secrets.GOOGLE_AI_KEY }}
 
         # ── Discord webhook (optionnel) ─────────────────────────────
         # Discord → Paramètres serveur → Intégrations → Webhooks
