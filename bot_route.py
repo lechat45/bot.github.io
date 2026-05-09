@@ -169,13 +169,13 @@ ACTIFS_ACTIONS = [
     "SPY", "QQQ", "KO",  "DAL", "BA",
 ]
 
-ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD"]   # Format Alpaca crypto
+ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD", "SOL/USD"]   # Format Alpaca crypto
 
 ACTIFS_TOUS = ACTIFS_ACTIONS + ACTIFS_CRYPTO
 
 SECTEURS = {
     "TECH":    ["TSLA","NVDA","AMD","AMZN","NFLX","META","AAPL","MSFT","GOOGL","INTC"],
-    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD"],
+    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD","SOL/USD"],
     "FINTECH": ["SOFI","PLTR"],
     "EV":      ["RIVN","LCID","NIO"],
     "MOBILITY":["UBER","LYFT"],
@@ -204,6 +204,25 @@ GROUPES_CORRELES = [
     {"UBER", "LYFT"},
     {"GME", "AMC"},
 ]
+
+# ── Candidats S&P500 pour rotation dynamique de watchlist ────────────
+SP500_CANDIDATS = [
+    "PYPL","SHOP","SQ","ROKU","ZM","DOCU","CRWD","NET","DDOG","SNOW",
+    "DASH","ABNB","BKNG","EXPE","MAR","HLT","UAL","LUV",
+    "JPM","BAC","C","WFC","GS","MS","BLK","SCHW","V","MA","AXP","COF","DFS",
+    "UNH","CVS","WMT","COST","TGT","HD","LOW","NKE","PEP","MCD","SBUX",
+    "DIS","CMCSA","T","VZ","TMUS","CRM","NOW","ADBE","ORCL","IBM","ACN",
+    "LLY","PFE","MRK","JNJ","ABBV","TMO","DHR","SYK","MDT","ISRG","AMGN",
+    "ENPH","NEE","FSLR","CEG","VST","GE","CAT","DE","HON",
+    "XOM","CVX","COP","OXY","SLB","HAL","FCX","NUE","CLF","AA",
+    "MSTR","RIOT","MARA","CLSK",
+    "AFRM","UPST","LI","XPEV",
+    "SMCI","ARM","AVGO","QCOM","TXN","MU","WDC","STX",
+    "SPOT","PINS","RDDT","MTCH",
+    "RKT","OPEN",
+]
+# Retirer les actifs déjà surveillés pour éviter les doublons
+SP500_CANDIDATS = [t for t in SP500_CANDIDATS if t not in ACTIFS_ACTIONS + ACTIFS_CRYPTO]
 
 
 # =============================================================================
@@ -953,6 +972,279 @@ Réponds UNIQUEMENT en JSON valide :
 
 
 # =============================================================================
+# [MODULE 4c] VeilleReddit — Sentiment Reddit sans clé API
+# =============================================================================
+
+class VeilleReddit:
+    """
+    Veille sentiment Reddit r/wallstreetbets + r/stocks via API JSON publique.
+    Aucune clé API nécessaire. Détecte les tickers les plus mentionnés.
+    """
+
+    URLS = [
+        "https://www.reddit.com/r/wallstreetbets/hot.json?limit=100",
+        "https://www.reddit.com/r/stocks/hot.json?limit=50",
+    ]
+    HEADERS   = {"User-Agent": "Mozilla/5.0 RouteBot/4.1 (trading research)"}
+    CACHE_TTL = 1800  # 30 min
+
+    def __init__(self):
+        self.logger      = logging.getLogger("Reddit")
+        self._cache_ts   = 0.0
+        self._cache_data = {}
+
+    def analyser(self, actifs: list) -> dict:
+        now = time.time()
+        if now - self._cache_ts < self.CACHE_TTL and self._cache_data:
+            return self._cache_data
+        try:
+            textes = []
+            for url in self.URLS:
+                try:
+                    r = requests.get(url, headers=self.HEADERS, timeout=8)
+                    if r.status_code == 200:
+                        posts = r.json().get("data", {}).get("children", [])
+                        for p in posts:
+                            d = p.get("data", {})
+                            textes.append(
+                                (d.get("title", "") + " " + d.get("selftext", "")[:300])
+                            )
+                except Exception as e:
+                    self.logger.debug(f"Reddit {url[:40]}: {e}")
+                time.sleep(0.5)
+
+            if not textes:
+                return self._cache_data or {
+                    "top_tickers": [], "sentiment_global": 0.5,
+                    "nb_posts": 0, "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+
+            texte_global = " ".join(textes).upper()
+            mentions = {}
+            for ticker in actifs:
+                t = ticker.replace("/USD", "")
+                count = texte_global.count(f" {t} ") + texte_global.count(f"${t}")
+                if count > 0:
+                    mentions[t] = count
+
+            top = sorted(mentions.items(), key=lambda x: x[1], reverse=True)[:10]
+            mots_pos = sum(texte_global.count(m) for m in
+                           ["BULL", "CALLS", "BUY", "MOON", "YOLO", "SQUEEZE", "PUMP"])
+            mots_neg = sum(texte_global.count(m) for m in
+                           ["BEAR", "PUTS", "SELL", "CRASH", "SHORT", "RIP", "DUMP"])
+            total = mots_pos + mots_neg
+            sent  = round(mots_pos / total, 2) if total > 0 else 0.5
+
+            result = {
+                "timestamp":        datetime.now(timezone.utc).isoformat(),
+                "top_tickers":      [{"ticker": t, "mentions": c} for t, c in top],
+                "sentiment_global": sent,
+                "nb_posts":         len(textes),
+            }
+            self._cache_data = result
+            self._cache_ts   = now
+            self.logger.info(f"Reddit: {len(top)} tickers mentionnés | sent={sent:.2f} | {len(textes)} posts")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Veille Reddit: {e}")
+            return self._cache_data or {
+                "top_tickers": [], "sentiment_global": 0.5,
+                "nb_posts": 0, "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+
+# =============================================================================
+# [MODULE 4d] DetecteurRegime — Régime de marché via SPY/QQQ
+# =============================================================================
+
+class DetecteurRegime:
+    """
+    Détecte le régime de marché (HAUSSIER / BAISSIER / LATÉRAL) via SPY + QQQ.
+    Utilisé pour ajuster la stratégie globale du bot.
+    """
+
+    CACHE_TTL = 300  # 5 min
+
+    def __init__(self):
+        self.logger    = logging.getLogger("Regime")
+        self._cache    = {}
+        self._cache_ts = 0.0
+
+    def detecter(self, df_spy: pd.DataFrame, df_qqq: pd.DataFrame = None) -> dict:
+        now = time.time()
+        if now - self._cache_ts < self.CACHE_TTL and self._cache:
+            return self._cache
+        vide = {"regime": "INDÉTERMINÉ", "spy_vs_ema50": 0.0,
+                "qqq_vs_ema50": 0.0, "description": "Données insuffisantes"}
+        try:
+            if df_spy is None or df_spy.empty or len(df_spy) < 55:
+                return vide
+            closes_spy = df_spy["close"]
+            ema50_spy  = ta.ema(closes_spy, length=50)
+            if ema50_spy is None or ema50_spy.empty:
+                return vide
+            spy_prix  = float(closes_spy.iloc[-1])
+            spy_ema50 = float(ema50_spy.iloc[-1])
+            spy_delta = (spy_prix - spy_ema50) / spy_ema50 * 100
+            spy_trend = (float(closes_spy.iloc[-1]) - float(closes_spy.iloc[-6])
+                         if len(closes_spy) >= 6 else 0)
+
+            qqq_delta = 0.0
+            if df_qqq is not None and not df_qqq.empty and len(df_qqq) >= 55:
+                closes_qqq = df_qqq["close"]
+                ema50_qqq  = ta.ema(closes_qqq, length=50)
+                if ema50_qqq is not None and not ema50_qqq.empty:
+                    qqq_delta = (float(closes_qqq.iloc[-1]) - float(ema50_qqq.iloc[-1])) \
+                                / float(ema50_qqq.iloc[-1]) * 100
+
+            avg = (spy_delta + qqq_delta) / 2 if qqq_delta else spy_delta
+
+            if avg > 2.0 and spy_trend > 0:
+                regime, desc = "HAUSSIER", f"SPY {spy_delta:+.1f}% EMA50 — tendance haussière"
+            elif avg < -2.0 or (spy_trend < 0 and avg < 0):
+                regime, desc = "BAISSIER", f"SPY {spy_delta:+.1f}% EMA50 — marché en recul"
+            else:
+                regime, desc = "LATÉRAL",  f"SPY {spy_delta:+.1f}% EMA50 — consolidation"
+
+            result = {
+                "regime":       regime,
+                "spy_vs_ema50": round(spy_delta, 2),
+                "qqq_vs_ema50": round(qqq_delta, 2),
+                "description":  desc,
+            }
+            self._cache    = result
+            self._cache_ts = now
+            self.logger.info(f"Régime marché : {regime} (SPY {spy_delta:+.1f}% EMA50)")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Régime: {e}")
+            return vide
+
+
+# =============================================================================
+# [MODULE 4e] ShadowPortfolio — Portefeuille fantôme (0 € investi)
+# =============================================================================
+
+class ShadowPortfolio:
+    """
+    Simule des trades sans les exécuter — mesure les opportunités manquées.
+    Capital virtuel séparé du capital réel, persistant entre les runs.
+    """
+
+    SHADOW_FILE        = Path("data/shadow_portfolio.json")
+    CAPITAL_VIRTUEL    = 100_000.0
+    ALLOCATION_VIRTUEL = 1_000.0
+
+    def __init__(self):
+        self.logger    = logging.getLogger("Shadow")
+        self.positions = {}   # {ticker: {prix_entree, qty, montant, timestamp}}
+        self.trades    = []
+        self.cash      = self.CAPITAL_VIRTUEL
+        self._charger()
+
+    def _charger(self):
+        try:
+            if self.SHADOW_FILE.exists():
+                with open(self.SHADOW_FILE, encoding="utf-8") as f:
+                    d = json.load(f)
+                self.positions = d.get("positions", {})
+                self.trades    = d.get("trades",    [])
+                self.cash      = d.get("cash",      self.CAPITAL_VIRTUEL)
+        except Exception as e:
+            self.logger.warning(f"Shadow load: {e}")
+
+    def simuler_achat(self, ticker: str, prix: float, score: float, raison: str = ""):
+        if ticker in self.positions or self.cash < self.ALLOCATION_VIRTUEL or prix <= 0:
+            return
+        qty = self.ALLOCATION_VIRTUEL / prix
+        self.positions[ticker] = {
+            "ticker":      ticker,
+            "prix_entree": prix,
+            "prix_actuel": prix,
+            "qty":         qty,
+            "montant":     self.ALLOCATION_VIRTUEL,
+            "score":       score,
+            "timestamp":   datetime.now(timezone.utc).isoformat(),
+            "raison":      raison,
+        }
+        self.cash -= self.ALLOCATION_VIRTUEL
+        self.logger.info(f"[SHADOW] BUY {ticker} @ ${prix:.2f}")
+
+    def simuler_vente(self, ticker: str, prix: float, raison: str = ""):
+        if ticker not in self.positions:
+            return
+        pos     = self.positions.pop(ticker)
+        pnl     = (prix - pos["prix_entree"]) * pos["qty"]
+        pnl_pct = (prix - pos["prix_entree"]) / pos["prix_entree"] * 100
+        self.cash += pos["montant"] + pnl
+        self.trades.append({
+            "type":        "SHADOW_VENTE",
+            "ticker":      ticker,
+            "prix_entree": pos["prix_entree"],
+            "prix_sortie": prix,
+            "pnl":         round(pnl, 2),
+            "pnl_pct":     round(pnl_pct, 2),
+            "timestamp":   datetime.now(timezone.utc).isoformat(),
+            "raison":      raison,
+        })
+        self.trades = self.trades[-200:]
+
+    def maj_prix(self, ticker: str, prix: float):
+        if ticker in self.positions:
+            self.positions[ticker]["prix_actuel"] = prix
+
+    def sauvegarder(self):
+        try:
+            self.SHADOW_FILE.parent.mkdir(parents=True, exist_ok=True)
+            pnl_total = 0.0
+            pos_export = {}
+            for t, pos in self.positions.items():
+                p   = dict(pos)
+                pa  = p.get("prix_actuel", p["prix_entree"])
+                pnl = (pa - p["prix_entree"]) * p["qty"]
+                p["pnl_virtuel"]     = round(pnl, 2)
+                p["pnl_virtuel_pct"] = round((pa - p["prix_entree"]) / p["prix_entree"] * 100, 2)
+                pnl_total += pnl
+                pos_export[t] = p
+            with open(self.SHADOW_FILE, "w", encoding="utf-8") as f:
+                json.dump({
+                    "timestamp":         datetime.now(timezone.utc).isoformat(),
+                    "positions":         pos_export,
+                    "trades":            self.trades[-50:],
+                    "cash":              round(self.cash, 2),
+                    "pnl_total_virtuel": round(pnl_total, 2),
+                    "nb_positions":      len(self.positions),
+                    "capital_virtuel":   self.CAPITAL_VIRTUEL,
+                }, f, indent=2)
+        except Exception as e:
+            self.logger.warning(f"Shadow save: {e}")
+
+    def export_dashboard(self) -> dict:
+        pnl_total = 0.0
+        pos_list  = []
+        for t, pos in self.positions.items():
+            p   = dict(pos)
+            pa  = p.get("prix_actuel", p["prix_entree"])
+            pnl = (pa - p["prix_entree"]) * p["qty"]
+            p["pnl_virtuel"]     = round(pnl, 2)
+            p["pnl_virtuel_pct"] = round((pa - p["prix_entree"]) / p["prix_entree"] * 100, 2)
+            pnl_total += pnl
+            pos_list.append(p)
+        wins     = sum(1 for t in self.trades if t.get("pnl", 0) > 0)
+        win_rate = round(wins / len(self.trades) * 100, 1) if self.trades else 0.0
+        return {
+            "positions":         sorted(pos_list, key=lambda x: x.get("pnl_virtuel", 0), reverse=True),
+            "trades_recents":    self.trades[-10:],
+            "pnl_total_virtuel": round(pnl_total, 2),
+            "nb_positions":      len(self.positions),
+            "cash_virtuel":      round(self.cash, 2),
+            "win_rate_virtuel":  win_rate,
+            "capital_virtuel":   self.CAPITAL_VIRTUEL,
+            "nb_trades":         len(self.trades),
+        }
+
+
+# =============================================================================
 # [MODULE 4b] NotificateurDiscord
 # =============================================================================
 
@@ -1345,6 +1637,10 @@ class BotRoute:
         self.decision    = ScoreDecisionIA()
         self.discord     = NotificateurDiscord()
         self.momentum    = GestionnaireMomentum()
+        self.shadow      = ShadowPortfolio()
+        self.reddit      = VeilleReddit()
+        self.regime_det  = DetecteurRegime()
+        self.df_qqq: pd.DataFrame = pd.DataFrame()
         self.persistance = GestionnairePersistance()
         self.logger      = logging.getLogger("BotRoute")
         self.cycle       = 0
@@ -1743,6 +2039,187 @@ class BotRoute:
         except Exception as e:
             logger.warning(f"Mise à jour corrélations échouée : {e}")
 
+    def _stress_test(self, positions: dict, equity: float) -> list:
+        """
+        Simule l'impact de chocs historiques sur le portefeuille actuel.
+        Aucune API — calcul purement mathématique.
+        """
+        SCENARIOS = [
+            {"nom": "Flash Crash COVID (Mar 2020)",  "baisse_pct": -34.0, "description": "S&P500 -34% en 33 jours"},
+            {"nom": "Bear Market Tech 2022",          "baisse_pct": -25.0, "description": "Nasdaq -35% sur 12 mois"},
+            {"nom": "Correction Taux Oct 2018",       "baisse_pct": -20.0, "description": "Fed hawkish, 4 hausses"},
+            {"nom": "Crise Financière 2008",          "baisse_pct": -50.0, "description": "S&P -57% sur 17 mois"},
+            {"nom": "Hausse Fed +0.75% surprise",     "baisse_pct":  -5.0, "description": "Réaction court terme"},
+            {"nom": "Flash Crash Mai 2010",           "baisse_pct": -10.0, "description": "-10% en 36 minutes"},
+        ]
+        valeur_pos = sum(p.get("market_value", 0) for p in positions.values())
+        results    = []
+        for sc in SCENARIOS:
+            impact     = valeur_pos * (sc["baisse_pct"] / 100)
+            eq_apres   = equity + impact
+            dd_total   = (eq_apres - self.risque.capital_initial) / self.risque.capital_initial * 100
+            results.append({
+                "nom":            sc["nom"],
+                "baisse_pct":     sc["baisse_pct"],
+                "description":    sc["description"],
+                "impact_pnl":     round(impact, 2),
+                "equity_apres":   round(eq_apres, 2),
+                "drawdown_total": round(dd_total, 2),
+                "couvert_sl":     abs(sc["baisse_pct"]) <= STOP_LOSS_PCT * 100,
+            })
+        return results
+
+    def _rotation_watchlist(self, positions: dict):
+        """
+        Analyse ~15 candidats S&P500 quand le marché est fermé.
+        Remplace le moins performant des actifs non tenus si un meilleur est trouvé.
+        """
+        global ACTIFS_ACTIONS, ACTIFS_TOUS, SP500_CANDIDATS
+        if not SP500_CANDIDATS:
+            return
+        MAX_A    = 15
+        day_idx  = datetime.now(timezone.utc).timetuple().tm_yday
+        start    = (day_idx * MAX_A) % len(SP500_CANDIDATS)
+        candidats = SP500_CANDIDATS[start:start + MAX_A]
+        if len(candidats) < MAX_A:
+            candidats += SP500_CANDIDATS[:MAX_A - len(candidats)]
+
+        self.logger.info(f"🔄 Rotation watchlist — analyse {len(candidats)} candidats")
+        tops = []
+        for ticker in candidats:
+            try:
+                df = self.alpaca.get_barres(ticker)
+                if df.empty or len(df) < 50:
+                    continue
+                tech = self.indicateurs.calculer(ticker, df)
+                if tech["score"] >= SEUIL_TECH_BUY:
+                    tops.append({"ticker": ticker, "score": tech["score"], "prix": tech["prix"]})
+                time.sleep(0.15)
+            except Exception as e:
+                self.logger.debug(f"Rotation {ticker}: {e}")
+
+        if not tops:
+            return
+        tops.sort(key=lambda x: x["score"], reverse=True)
+        entrant = tops[0]
+
+        # Charger scores backtest pour trouver le moins performant
+        scores_bt = {}
+        try:
+            br = DATA_DIR / "backtest_results.json"
+            if br.exists():
+                with open(br) as f:
+                    bt = json.load(f)
+                for a in bt.get("actifs", []):
+                    scores_bt[a["ticker"]] = a.get("avg_pnl_pct", 0.0)
+        except Exception:
+            pass
+
+        remplacables = [a for a in ACTIFS_ACTIONS if a not in positions]
+        if not remplacables:
+            return
+        sortant = min(remplacables, key=lambda a: scores_bt.get(a, 0.0))
+
+        if entrant["score"] >= SEUIL_TECH_BUY and entrant["ticker"] not in ACTIFS_TOUS:
+            ACTIFS_ACTIONS.remove(sortant)
+            ACTIFS_ACTIONS.append(entrant["ticker"])
+            ACTIFS_TOUS = ACTIFS_ACTIONS + ACTIFS_CRYPTO
+            if entrant["ticker"] in SP500_CANDIDATS:
+                SP500_CANDIDATS.remove(entrant["ticker"])
+            SP500_CANDIDATS.append(sortant)
+            self.logger.info(f"🔄 Watchlist : {sortant} → {entrant['ticker']} (score {entrant['score']:.0f})")
+            try:
+                wl_path = DATA_DIR / "watchlist_dynamique.json"
+                hist = []
+                if wl_path.exists():
+                    with open(wl_path) as f:
+                        hist = json.load(f).get("historique", [])
+                hist.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "sortant": sortant, "entrant": entrant["ticker"],
+                    "score_entrant": entrant["score"],
+                })
+                with open(wl_path, "w") as f:
+                    json.dump({
+                        "timestamp":   datetime.now(timezone.utc).isoformat(),
+                        "actifs_actifs": ACTIFS_ACTIONS,
+                        "top_candidats": tops[:5],
+                        "historique":  hist[-20:],
+                    }, f, indent=2)
+            except Exception as e:
+                self.logger.warning(f"Watchlist save: {e}")
+
+    def _apprentissage_patterns(self, decisions: list, marche_ouvert: bool):
+        """
+        Enregistre les signaux forts et vérifie les prédictions 20h+ plus tard.
+        Calcule un taux de précision global pour auto-évaluation.
+        """
+        PATTERNS_FILE = DATA_DIR / "patterns_appris.json"
+        try:
+            existants = []
+            if PATTERNS_FILE.exists():
+                with open(PATTERNS_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+                existants = data.get("patterns", [])
+
+            now_utc   = datetime.now(timezone.utc)
+            n_verif   = 0
+            n_correct = 0
+
+            for p in existants:
+                if p.get("verifie"):
+                    continue
+                try:
+                    ts  = datetime.fromisoformat(p["timestamp"].replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if (now_utc - ts).total_seconds() / 3600 < 20:
+                        continue
+                    d = next((x for x in decisions if x["ticker"] == p["ticker"]), None)
+                    if d and d.get("prix") and p.get("prix"):
+                        variation = (d["prix"] - p["prix"]) / p["prix"] * 100
+                        correct   = (p["signal"] == "BUY" and variation > 0) or \
+                                    (p["signal"] == "SELL" and variation < 0)
+                        p.update({"verifie": True, "prix_24h": round(d["prix"], 4),
+                                  "variation_pct": round(variation, 2), "correct": correct})
+                        n_verif  += 1
+                        n_correct += int(correct)
+                except Exception:
+                    pass
+
+            nouveaux = [
+                {"timestamp": now_utc.isoformat(), "ticker": d["ticker"],
+                 "signal": d["signal_technique"], "score": d["score_technique"],
+                 "prix": d["prix"], "rsi": d.get("rsi"),
+                 "marche_ouvert": marche_ouvert, "verifie": False}
+                for d in decisions
+                if d.get("signal_technique") in ("BUY", "SELL")
+                and d.get("score_technique", 0) >= SEUIL_CONVICTION_FAIBLE
+                and d.get("prix")
+            ]
+
+            tous = (existants + nouveaux)[-500:]
+            verifies  = [p for p in tous if p.get("verifie")]
+            precision = 0.0
+            if verifies:
+                precision = round(sum(1 for p in verifies if p.get("correct")) / len(verifies) * 100, 1)
+
+            with open(PATTERNS_FILE, "w", encoding="utf-8") as f:
+                json.dump({
+                    "timestamp":         now_utc.isoformat(),
+                    "patterns":          tous,
+                    "nb_total":          len(tous),
+                    "nb_verifies":       len(verifies),
+                    "precision_globale": precision,
+                    "verifies_cycle":    n_verif,
+                    "corrects_cycle":    n_correct,
+                }, f, indent=2)
+
+            if n_verif > 0:
+                self.logger.info(f"📐 Patterns: {n_correct}/{n_verif} corrects (précision globale {precision:.1f}%)")
+        except Exception as e:
+            self.logger.warning(f"Apprentissage patterns: {e}")
+
     def _auditer_positions(self, positions: dict):
         for ticker, pos in list(positions.items()):
             raison = None
@@ -1819,6 +2296,11 @@ class BotRoute:
             tech["signal"] == "SELL" or
             dans_position
         )
+        # Quand marché fermé : n'appeler l'IA QUE si déjà en cache (évite les 429 inutiles)
+        if not executer:
+            should_analyze_groq = should_analyze_groq and (
+                ticker in self.sentiment._cache or ticker in self.gemini._cache
+            )
         if should_analyze_groq:
             sent = self.sentiment.scorer(
                 ticker, tech["prix"] or 0,
@@ -1971,12 +2453,37 @@ class BotRoute:
 
         # Données SPY pour score momentum
         self.df_spy = self.alpaca.get_barres("SPY")
+        # Données QQQ pour détection régime
+        self.df_qqq = self.alpaca.get_barres("QQQ")
+        # Régime de marché
+        regime_marche = self.regime_det.detecter(self.df_spy, self.df_qqq)
 
         decisions = []
         for ticker in ACTIFS_TOUS:
             time.sleep(0.05)
             d = self._analyser_actif(ticker, positions, compte, executer=marche_ouvert)
             decisions.append(d)
+
+        # ── Shadow Portfolio — simulation sans capital réel ───────────────────
+        for d in decisions:
+            ticker = d["ticker"]
+            prix   = d.get("prix") or 0
+            if not prix:
+                continue
+            self.shadow.maj_prix(ticker, prix)
+            # Simuler achat virtuel si signal fort non exécuté (marché fermé ou capital insuffisant)
+            if (d.get("signal_technique") == "BUY" and
+                    d.get("score_technique", 0) >= SEUIL_CONVICTION_FAIBLE and
+                    d.get("action_executee") in ("AUCUNE", "PRÉPARE") and
+                    ticker not in self.shadow.positions):
+                self.shadow.simuler_achat(ticker, prix, d.get("score_technique", 0), d.get("raison", ""))
+            # Simuler vente virtuelle sur signal SELL
+            elif d.get("signal_technique") == "SELL" and ticker in self.shadow.positions:
+                self.shadow.simuler_vente(ticker, prix, "Signal SELL")
+        self.shadow.sauvegarder()
+
+        # Apprentissage passif des patterns
+        self._apprentissage_patterns(decisions, marche_ouvert)
 
         # ── Routines d'entraînement nocturnes ────────────────────────────────
         if not marche_ouvert:
@@ -2000,6 +2507,13 @@ class BotRoute:
             # Corrélations dynamiques — weekend uniquement, max 1× / 12h
             if wday >= 5 and self._peut_executer_routine("correlations.json", 12.0):
                 self._mettre_a_jour_correlations()
+
+            # Rotation watchlist — toutes les 6h la nuit
+            if self._peut_executer_routine("watchlist_dynamique.json", 6.0):
+                self._rotation_watchlist(positions)
+
+        # Veille Reddit 24/7 (cache 30 min)
+        veille_reddit = self.reddit.analyser(ACTIFS_TOUS + SP500_CANDIDATS[:20])
 
         self.historique_valeur.append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2038,6 +2552,9 @@ class BotRoute:
         # Métriques de performance depuis SQLite
         metriques = self.persistance.calculer_metriques()
 
+        # Stress test portefeuille
+        stress_test = self._stress_test(positions_apres, compte["equity"])
+
         # Trades récents depuis SQLite (plus fiable que la liste mémoire)
         trades_recents = self.persistance.charger_recents(500)
 
@@ -2066,6 +2583,18 @@ class BotRoute:
                 "historique_valeur": self.historique_valeur,
             },
             "decisions_cycle": decisions,
+            "shadow_portfolio":  self.shadow.export_dashboard(),
+            "scanner_signaux":   sorted(
+                [{"ticker": d["ticker"], "score": d["score_technique"],
+                  "signal": d["signal_technique"], "conviction": d.get("conviction",""),
+                  "prix": d.get("prix"), "rsi": d.get("rsi"),
+                  "croisement_hma": d.get("croisement_hma", False)}
+                 for d in decisions if d.get("signal_technique") in ("BUY","SELL")],
+                key=lambda x: x["score"], reverse=True
+            )[:15],
+            "regime_marche":     regime_marche,
+            "veille_reddit":     veille_reddit,
+            "stress_test":       stress_test,
             "metriques": metriques,
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
@@ -2075,6 +2604,7 @@ class BotRoute:
                 "allocation_base":    ALLOCATION_BASE,
                 "seuil_sentiment":    SEUIL_SENTIMENT_BUY,
                 "nb_actifs":          len(ACTIFS_TOUS),
+                "nb_candidats_sp500": len(SP500_CANDIDATS),
                 "indicateurs":        list(POIDS.keys()),
                 "sentiment_modele":   AnalyseurSentimentGroq.MODELE,
             },
