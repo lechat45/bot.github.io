@@ -247,7 +247,8 @@ jobs:
 
         git add data/etat_bot.json data/historique_trades.json data/trades.db \
                 data/poids_appris.json data/backtest_results.json \
-                data/groq_warmup.json data/correlations.json 2>/dev/null || true
+                data/groq_warmup.json data/correlations.json \
+                data/shadow_portfolio.json data/watchlist_dynamique.json data/patterns_appris.json 2>/dev/null || true
 
         if git diff --cached --quiet; then
           echo "ℹ️  Aucune modification — commit ignoré"
@@ -276,6 +277,9 @@ jobs:
         cp data/poids_appris.json        _site/data/poids_appris.json        2>/dev/null || true
         cp data/backtest_results.json    _site/data/backtest_results.json    2>/dev/null || true
         cp data/correlations.json        _site/data/correlations.json        2>/dev/null || true
+        cp data/shadow_portfolio.json      _site/data/shadow_portfolio.json      2>/dev/null || true
+        cp data/watchlist_dynamique.json   _site/data/watchlist_dynamique.json   2>/dev/null || true
+        cp data/patterns_appris.json       _site/data/patterns_appris.json       2>/dev/null || true
         echo "Contenu _site/ :"
         ls -lh _site/
         ls -lh _site/data/ 2>/dev/null || echo "(data/ vide)"
