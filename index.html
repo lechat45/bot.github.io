@@ -440,7 +440,7 @@
     .regime-HAUSSIER{background:rgba(0,255,136,0.12);border:1px solid var(--grn);color:var(--grn)}
     .regime-BAISSIER{background:rgba(255,45,120,0.12);border:1px solid var(--mag);color:var(--mag)}
     .regime-LATERAL,.regime-LATÉRAL{background:rgba(255,200,0,0.12);border:1px solid #ffc800;color:#ffc800}
-    .regime-INDÉTERMINÉ{background:rgba(100,120,140,0.12);border:1px solid var(--dim);color:var(--dim)}
+    .regime-INDÉTERMINÉ,.regime-INDETERMINE,.regime-INDETERMINÉ{background:rgba(100,120,140,0.12);border:1px solid var(--dim);color:var(--dim)}
     .regime-desc{font:400 12px 'JetBrains Mono',monospace;color:var(--dim);margin-top:4px}
 
     /* ── Reddit Veille ──────────────────────────────────────── */
@@ -455,6 +455,25 @@
     .stress-table tr:hover td{background:var(--hover)}
     .stress-cov{color:var(--grn);font-size:10px}
     .stress-nocov{color:var(--mag);font-size:10px}
+
+    /* ── Monte Carlo ──────────────────────────────────────────── */
+    .mc-histo-wrap{position:relative;height:100px;display:flex;align-items:flex-end;gap:2px;margin:12px 0 6px}
+    .mc-bar{flex:1;background:linear-gradient(0deg,rgba(0,255,242,0.7),rgba(0,255,242,0.15));border-radius:2px 2px 0 0;min-height:2px;transition:height .3s}
+    .mc-bar.peak{background:linear-gradient(0deg,rgba(255,200,0,0.9),rgba(255,200,0,0.3))}
+    .mc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+    .mc-stat{background:var(--raised);border:1px solid var(--border);border-radius:var(--r2);padding:8px;text-align:center}
+    .mc-stat label{display:block;font:400 10px 'JetBrains Mono',monospace;color:var(--dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px}
+    .mc-stat span{font:700 14px 'JetBrains Mono',monospace}
+    .mc-axis{display:flex;justify-content:space-between;font:400 10px 'JetBrains Mono',monospace;color:var(--dim)}
+
+    /* ── Circuit Breaker + Portfolio Heat ────────────────────── */
+    .cb-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;font:700 11px 'JetBrains Mono',monospace}
+    .cb-ok{background:rgba(0,255,136,0.08);border:1px solid var(--grn);color:var(--grn)}
+    .cb-alert{background:rgba(255,45,120,0.15);border:1px solid var(--mag);color:var(--mag);animation:blink 1s step-end infinite}
+    @keyframes blink{50%{opacity:0.4}}
+    .heat-bar-wrap{margin-top:8px}
+    .heat-bar-track{height:8px;background:var(--panel);border-radius:4px;overflow:hidden;margin:4px 0}
+    .heat-bar-fill{height:100%;border-radius:4px;transition:width .4s}
 
     /* Fade-out bas de liste trades */
     .tscroll-wrap { position: relative; }
@@ -1053,6 +1072,96 @@
 
       </section>
 
+      <!-- ─── SECTION 7 : Monte Carlo + Circuit Breaker ─── -->
+      <section class="two-col" style="margin-top:20px">
+
+        <!-- Monte Carlo Distribution -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l">
+              <span class="phd-icon">🎲</span> MONTE CARLO
+            </span>
+            <span class="phd-r" id="mc-sims" style="font-size:11px;color:var(--dim)">0 simulations</span>
+          </div>
+          <div class="card-body">
+            <div id="mc-histo" class="mc-histo-wrap"></div>
+            <div class="mc-axis"><span id="mc-min">—</span><span id="mc-max">—</span></div>
+            <div class="mc-stats">
+              <div class="mc-stat">
+                <label>P5 (pire 5%)</label>
+                <span id="mc-p5" class="cold">—</span>
+              </div>
+              <div class="mc-stat">
+                <label>Médiane</label>
+                <span id="mc-p50">—</span>
+              </div>
+              <div class="mc-stat">
+                <label>P95 (meilleur)</label>
+                <span id="mc-p95" class="hot">—</span>
+              </div>
+              <div class="mc-stat">
+                <label>DD max 95%</label>
+                <span id="mc-dd" class="cold">—</span>
+              </div>
+              <div class="mc-stat">
+                <label>Probabilité ruine</label>
+                <span id="mc-ruin">—</span>
+              </div>
+              <div class="mc-stat">
+                <label>Trades utilisés</label>
+                <span id="mc-trades" style="color:var(--dim)">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Circuit Breaker + Portfolio Heat + Kelly -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l">
+              <span class="phd-icon">🛡️</span> PROTECTION CAPITAL
+            </span>
+          </div>
+          <div class="card-body">
+            <!-- Circuit Breaker -->
+            <div style="margin-bottom:14px">
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">CIRCUIT BREAKER</div>
+              <div id="cb-badge" class="cb-badge cb-ok">✓ ACTIF — Trading normal</div>
+              <div style="margin-top:6px;font:400 11px 'JetBrains Mono',monospace;color:var(--dim)">
+                Seuil: <span id="cb-seuil">3</span>% pertes/jour |
+                P&L jour: <span id="cb-pnl-jour">—</span>
+              </div>
+            </div>
+            <!-- Portfolio Heat -->
+            <div style="margin-bottom:14px">
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:4px">PORTFOLIO HEAT</div>
+              <div style="display:flex;justify-content:space-between;font:400 11px 'JetBrains Mono',monospace">
+                <span id="heat-pct" style="color:var(--cyn)">0%</span>
+                <span style="color:var(--dim)">max <span id="heat-max">8</span>%</span>
+              </div>
+              <div class="heat-bar-track">
+                <div id="heat-fill" class="heat-bar-fill" style="width:0%;background:var(--grn)"></div>
+              </div>
+            </div>
+            <!-- Kelly -->
+            <div>
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">KELLY CRITERION</div>
+              <div style="display:flex;gap:16px">
+                <div class="kpi-mini">
+                  <span id="kelly-base" style="color:var(--cyn)">—</span>
+                  <label>taille Kelly</label>
+                </div>
+                <div class="kpi-mini">
+                  <span id="kelly-std" style="color:var(--dim)">—</span>
+                  <label>taille standard</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
   <footer class="footer" id="footer">
     ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">Groq Cloud llama-3.3-70b</span> · En attente…
   </footer>
@@ -1080,6 +1189,11 @@ async function load() {
   } catch {
     setStatus(false, false);
   }
+  // Charger Monte Carlo (mis à jour 1×/nuit)
+  fetch('data/monte_carlo.json?_=' + Date.now())
+    .then(r => r.ok ? r.json() : null)
+    .then(mc => { if (mc) renderMonteCarlo(mc); })
+    .catch(() => {});
 }
 
 function setStatus(ok, pause) {
@@ -1273,6 +1387,7 @@ function render(data) {
   renderRegime(data.regime_marche);
   renderReddit(data.veille_reddit);
   renderStress(data.stress_test);
+  renderProtection(data.circuit_breaker, data.portfolio_heat, data.kelly);
 
   $('footer').innerHTML =
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
@@ -2025,7 +2140,7 @@ function renderRegime(regime) {
   if (!regime) return;
   const badge = $('regime-badge');
   const desc  = $('regime-desc');
-  const r     = (regime.regime ?? 'INDÉTERMINÉ').replace('É','E').replace('Â','A');
+  const r     = (regime.regime ?? 'INDÉTERMINÉ').replace(/É/g,'E').replace(/Â/g,'A').replace(/È/g,'E').replace(/Ê/g,'E');
   if (badge) {
     badge.className   = `regime-badge regime-${r}`;
     badge.textContent = `◈ ${regime.regime ?? 'INDÉTERMINÉ'}`;
@@ -2078,6 +2193,90 @@ function renderStress(scenarios) {
       <td><span class="${sl ? 'stress-cov' : 'stress-nocov'}">${sl ? '✓ SL' : '✗ SL'}</span></td>
     </tr>`;
   }).join('');
+}
+
+/* ── Monte Carlo ──────────────────────────────────────────── */
+function renderMonteCarlo(mc) {
+  if (!mc || !mc.histogram) return;
+  setTxt('mc-sims',   `${(mc.nb_simulations??0).toLocaleString()} sim`);
+  setTxt('mc-min',    fU(mc.hist_min ?? 0));
+  setTxt('mc-max',    fU(mc.hist_max ?? 0));
+  setTxt('mc-trades', mc.nb_trades ?? '—');
+
+  const p5  = mc.p5_equity  ?? 0;
+  const p50 = mc.p50_equity ?? 0;
+  const p95 = mc.p95_equity ?? 0;
+  const cap = mc.capital_initial ?? 100000;
+
+  const p5El  = $('mc-p5');
+  const p50El = $('mc-p50');
+  const p95El = $('mc-p95');
+  if (p5El)  { p5El.textContent  = fU(p5);  p5El.className  = p5  >= cap ? 'hot' : 'cold'; }
+  if (p50El) { p50El.textContent = fU(p50); p50El.className = p50 >= cap ? 'hot' : 'cold'; }
+  if (p95El) { p95El.textContent = fU(p95); p95El.className = 'hot'; }
+  setTxt('mc-dd',   `${mc.worst_dd_95pct ?? 0}%`);
+
+  const ruinEl = $('mc-ruin');
+  const ruin = mc.ruin_prob ?? 0;
+  if (ruinEl) {
+    ruinEl.textContent = `${ruin.toFixed(1)}%`;
+    ruinEl.className = ruin < 5 ? 'hot' : ruin < 15 ? '' : 'cold';
+  }
+
+  // Histogramme
+  const histo = $('mc-histo');
+  if (!histo) return;
+  const bars = mc.histogram ?? [];
+  const maxH = Math.max(...bars, 1);
+  const peakIdx = bars.indexOf(Math.max(...bars));
+  histo.innerHTML = bars.map((v, i) => {
+    const h   = Math.max(2, Math.round(v / maxH * 96));
+    const cls = i === peakIdx ? 'mc-bar peak' : 'mc-bar';
+    return `<div class="${cls}" style="height:${h}px" title="${v} simulations"></div>`;
+  }).join('');
+}
+
+/* ── Circuit Breaker + Portfolio Heat + Kelly ──────────────── */
+function renderProtection(cb, heat, kelly) {
+  // Circuit Breaker
+  if (cb) {
+    const badge = $('cb-badge');
+    if (badge) {
+      if (cb.actif) {
+        badge.className   = 'cb-badge cb-alert';
+        badge.textContent = `⚡ DÉCLENCHÉ — ${Math.abs(cb.pnl_jour) > 0 ? fU(cb.pnl_jour) : ''} Trading bloqué`;
+      } else {
+        badge.className   = 'cb-badge cb-ok';
+        badge.textContent = '✓ OK — Trading normal';
+      }
+    }
+    setTxt('cb-seuil',    cb.seuil_pct ?? 3);
+    const pnlJ = cb.pnl_jour ?? 0;
+    const pEl  = $('cb-pnl-jour');
+    if (pEl) {
+      pEl.textContent = `${pnlJ >= 0 ? '+' : ''}${fU(pnlJ)}`;
+      pEl.className = pnlJ >= 0 ? 'hot' : 'cold';
+    }
+  }
+
+  // Portfolio Heat
+  if (heat) {
+    const h     = heat.heat_pct ?? 0;
+    const maxH  = heat.max_pct  ?? 8;
+    const pct   = Math.min(100, h / maxH * 100);
+    const color = h >= maxH ? 'var(--mag)' : h >= maxH * 0.7 ? '#ffc800' : 'var(--grn)';
+    const hEl   = $('heat-pct');
+    if (hEl)   { hEl.textContent = `${h.toFixed(1)}%`; hEl.style.color = color; }
+    setTxt('heat-max', maxH);
+    const fill = $('heat-fill');
+    if (fill)  { fill.style.width = `${pct}%`; fill.style.background = color; }
+  }
+
+  // Kelly
+  if (kelly) {
+    setTxt('kelly-base', fU(kelly.base_usd   ?? 0));
+    setTxt('kelly-std',  fU(kelly.standard_usd ?? 0));
+  }
 }
 </script>
 </body>

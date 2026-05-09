@@ -141,15 +141,22 @@ BARRES_LIMIT        = 120   # Bougies 1h — suffisant pour EMA100 + tous les in
 
 # ── Pondération score composite (total = 100) ────────────────────────────
 POIDS = {
-    "hma_crossover":  25,   # HMA vs prix — signal prioritaire (code fourni)
-    "ema_crossover":  15,   # EMA9 vs EMA21
-    "ema_tendance":   15,   # Prix vs EMA100
-    "macd":           15,   # MACD vs signal line
-    "rsi":            10,   # Zones achat/vente
-    "bollinger":      10,   # Position dans les bandes
-    "adx":            5,    # Force de tendance
-    "volume":         5,    # Confirmation volume
+    "hma_crossover":  25,   # prioritaire — code fourni
+    "ema_crossover":  13,   # -2
+    "ema_tendance":   13,   # -2
+    "macd":           15,   # inchangé
+    "rsi":             8,   # -2
+    "bollinger":       7,   # -3
+    "adx":             3,   # -2
+    "volume":          3,   # -2
+    "vwap":            5,   # NOUVEAU — référence institutionnelle
+    "ichimoku":        8,   # NOUVEAU — filtre tendance Ichimoku Cloud
 }
+# Sum = 25+13+13+15+8+7+3+3+5+8 = 100
+
+# ── Gestion du risque avancée ────────────────────────────────────────
+MAX_HEAT_PCT       = 8.0    # Portfolio heat max — bloque achats si > 8%
+MAX_DAILY_LOSS_PCT = 3.0    # Circuit breaker — stop trading si pertes jour > 3%
 
 # ── Seuils de décision ───────────────────────────────────────────────────
 SEUIL_TECH_BUY          = 60
@@ -207,19 +214,43 @@ GROUPES_CORRELES = [
 
 # ── Candidats S&P500 pour rotation dynamique de watchlist ────────────
 SP500_CANDIDATS = [
-    "PYPL","SHOP","SQ","ROKU","ZM","DOCU","CRWD","NET","DDOG","SNOW",
-    "DASH","ABNB","BKNG","EXPE","MAR","HLT","UAL","LUV",
-    "JPM","BAC","C","WFC","GS","MS","BLK","SCHW","V","MA","AXP","COF","DFS",
-    "UNH","CVS","WMT","COST","TGT","HD","LOW","NKE","PEP","MCD","SBUX",
-    "DIS","CMCSA","T","VZ","TMUS","CRM","NOW","ADBE","ORCL","IBM","ACN",
+    # Fintech / Paiements
+    "PYPL","SQ","V","MA","AXP","COF","DFS","SCHW","BLK","GS","MS","JPM","BAC","C","WFC",
+    # Tech Cloud / SaaS
+    "CRWD","NET","DDOG","SNOW","ZS","OKTA","MDB","GTLB","CFLT","HUBS",
+    "CRM","NOW","ADBE","ORCL","IBM","ACN","INTU","ANSS","CDNS","SNPS",
+    # Semi-conducteurs
+    "AVGO","QCOM","TXN","MU","WDC","STX","MRVL","ON","WOLF","ENTG","AMAT","LRCX","KLAC",
+    "SMCI","ARM","SWKS","MTSI",
+    # Biotech / Pharma
     "LLY","PFE","MRK","JNJ","ABBV","TMO","DHR","SYK","MDT","ISRG","AMGN",
-    "ENPH","NEE","FSLR","CEG","VST","GE","CAT","DE","HON",
-    "XOM","CVX","COP","OXY","SLB","HAL","FCX","NUE","CLF","AA",
-    "MSTR","RIOT","MARA","CLSK",
-    "AFRM","UPST","LI","XPEV",
-    "SMCI","ARM","AVGO","QCOM","TXN","MU","WDC","STX",
-    "SPOT","PINS","RDDT","MTCH",
-    "RKT","OPEN",
+    "REGN","VRTX","BIIB","GILD","BMY","BSX","EW","DXCM","IDXX",
+    # Consommation / Retail
+    "WMT","COST","TGT","HD","LOW","NKE","PEP","MCD","SBUX","CMG","LULU","TJX","ROST",
+    # Énergie
+    "XOM","CVX","COP","OXY","SLB","HAL","PSX","MPC","VLO","EOG",
+    # Matériaux / Industrie
+    "FCX","NUE","CLF","AA","GE","CAT","DE","HON","RTX","LMT","NOC","GD","BA",
+    # Énergie verte
+    "ENPH","NEE","FSLR","CEG","VST","AES","RUN","SEDG",
+    # Media / Streaming / Gaming
+    "DIS","CMCSA","NFLX","SPOT","RDDT","PINS","MTCH","EA","TTWO","RBLX",
+    # Telecom
+    "T","VZ","TMUS",
+    # Travel / Hospitality
+    "BKNG","EXPE","MAR","HLT","ABNB","DASH","UAL","LUV",
+    # Santé / Assurance
+    "UNH","CVS","HUM","CI","CNC","MOH",
+    # Crypto-related
+    "MSTR","RIOT","MARA","CLSK","BTBT","HUT",
+    # Fintech alternatif
+    "AFRM","UPST","LC",
+    # Véhicules électriques
+    "LI","XPEV","FSR","GOEV",
+    # Divers haute volatilité / momentum
+    "RKT","OPEN","CLOV","SPCE","NKLA","WKHS",
+    # ETF sectoriels (peuvent être tradés comme actions)
+    "XLF","XLK","XLE","XLV","XLC","ARKK","ARKG","ARKF",
 ]
 # Retirer les actifs déjà surveillés pour éviter les doublons
 SP500_CANDIDATS = [t for t in SP500_CANDIDATS if t not in ACTIFS_ACTIONS + ACTIFS_CRYPTO]
@@ -607,6 +638,53 @@ class MoteurIndicateurs:
                             points_sell += POIDS["volume"]
         except Exception as e:
             self.logger.debug(f"Volume {ticker}: {e}")
+
+        # ── 10. VWAP — référence institutionnelle intraday ───────────────
+        try:
+            n_bars = min(10, len(df))
+            df_vwap = df.iloc[-n_bars:].copy()
+            typical  = (df_vwap["high"] + df_vwap["low"] + df_vwap["close"]) / 3
+            vol_sum  = df_vwap["volume"].sum()
+            if vol_sum > 0:
+                vwap_val = float((typical * df_vwap["volume"]).sum() / vol_sum)
+                ind["vwap"] = round(vwap_val, 4)
+                dist_pct    = (prix - vwap_val) / vwap_val * 100
+                ind["vwap_dist_pct"] = round(dist_pct, 2)
+                if prix > vwap_val:
+                    points_buy  += POIDS["vwap"]
+                    ind["vwap_signal"] = "au_dessus"
+                else:
+                    points_sell += POIDS["vwap"]
+                    ind["vwap_signal"] = "en_dessous"
+        except Exception as e:
+            self.logger.debug(f"VWAP {ticker}: {e}")
+
+        # ── 11. Ichimoku Cloud — filtre de tendance primaire ─────────────
+        try:
+            if len(df) >= 60:
+                ich_result = ta.ichimoku(df["high"], df["low"], df["close"],
+                                         tenkan=9, kijun=26, senkou=52)
+                if ich_result and ich_result[0] is not None and not ich_result[0].empty:
+                    ich_df   = ich_result[0]
+                    span_a_c = [c for c in ich_df.columns if "ISA" in c]
+                    span_b_c = [c for c in ich_df.columns if "ISB" in c]
+                    if span_a_c and span_b_c:
+                        span_a      = float(ich_df[span_a_c[0]].dropna().iloc[-1])
+                        span_b      = float(ich_df[span_b_c[0]].dropna().iloc[-1])
+                        cloud_top   = max(span_a, span_b)
+                        cloud_bot   = min(span_a, span_b)
+                        ind["ich_cloud_top"] = round(cloud_top, 4)
+                        ind["ich_cloud_bot"] = round(cloud_bot, 4)
+                        if prix > cloud_top:
+                            points_buy  += POIDS["ichimoku"]
+                            ind["ich_signal"] = "au_dessus_nuage"
+                        elif prix < cloud_bot:
+                            points_sell += POIDS["ichimoku"]
+                            ind["ich_signal"] = "sous_nuage"
+                        else:
+                            ind["ich_signal"] = "dans_nuage"
+        except Exception as e:
+            self.logger.debug(f"Ichimoku {ticker}: {e}")
 
         # ── Score composite ───────────────────────────────────────────────
         total_possible = sum(POIDS.values())
@@ -1519,13 +1597,66 @@ class GestionnaireRisque:
             return True
         return False
 
-    def allocation(self, conviction: str, atr_pct: Optional[float]) -> float:
-        base = {"FORTE": ALLOCATION_FORTE,
-                "MOYENNE": ALLOCATION_BASE,
-                "FAIBLE": ALLOCATION_FAIBLE}.get(conviction, ALLOCATION_BASE)
+    def allocation(self, conviction: str, atr_pct: Optional[float],
+                   kelly_base: float = None) -> float:
+        """Taille de position. Utilise Kelly si disponible, sinon allocation fixe."""
+        if kelly_base is not None:
+            base = kelly_base
+            if conviction == "FORTE":
+                base *= 1.2
+            elif conviction == "FAIBLE":
+                base *= 0.8
+        else:
+            base = {"FORTE": ALLOCATION_FORTE,
+                    "MOYENNE": ALLOCATION_BASE,
+                    "FAIBLE": ALLOCATION_FAIBLE}.get(conviction, ALLOCATION_BASE)
         if atr_pct and atr_pct > 2.0:
             base *= max(0.7, 1 - (atr_pct - 2.0) * 0.1)
         return round(base, 2)
+
+    def calculer_portfolio_heat(self, positions: dict, capital: float) -> float:
+        """
+        Portfolio Heat = somme des risques ouverts / capital.
+        Approximation : risk par position = market_value × STOP_LOSS_PCT.
+        Bloque les nouveaux achats si heat ≥ MAX_HEAT_PCT (8%).
+        """
+        if not positions or capital <= 0:
+            return 0.0
+        total_risk = sum(
+            pos.get("market_value", 0) * STOP_LOSS_PCT
+            for pos in positions.values()
+        )
+        return round(total_risk / capital * 100, 2)
+
+    def calculer_kelly_base(self, conn) -> float:
+        """
+        Critère de Kelly (1/4 Kelly pour sécurité) depuis l'historique SQLite.
+        Retourne la taille de position optimale en USD.
+        Minimum ALLOCATION_FAIBLE, maximum ALLOCATION_FORTE × 1.5.
+        """
+        try:
+            rows = conn.execute(
+                "SELECT pnl_pct FROM trades WHERE type IN ('VENTE','VENTE_AUTO') "
+                "AND pnl_pct IS NOT NULL ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+            if len(rows) < 15:
+                return ALLOCATION_BASE
+            pnl_pcts = [r[0] for r in rows]
+            wins     = [p for p in pnl_pcts if p > 0]
+            losses   = [abs(p) for p in pnl_pcts if p < 0]
+            if not wins or not losses:
+                return ALLOCATION_BASE
+            win_rate = len(wins) / len(pnl_pcts)
+            avg_win  = sum(wins)  / len(wins)  / 100
+            avg_loss = sum(losses) / len(losses) / 100
+            b        = avg_win / avg_loss if avg_loss > 0 else 1.0
+            kelly    = (b * win_rate - (1 - win_rate)) / b
+            kelly_f  = max(0.005, min(0.08, kelly * 0.25))   # 1/4 Kelly, cap 0.5–8%
+            amount   = self.capital_initial * kelly_f
+            result   = round(max(ALLOCATION_FAIBLE, min(ALLOCATION_FORTE * 1.5, amount)), 2)
+            return result
+        except Exception:
+            return ALLOCATION_BASE
 
     def positions_disponibles(self, nb: int) -> bool:
         return nb < MAX_POSITIONS
@@ -1650,11 +1781,15 @@ class BotRoute:
         self.df_spy: pd.DataFrame = pd.DataFrame()
         self._cooldown: dict   = {}   # ticker → timestamp fin de cooldown
         self._achats_ce_cycle  = 0    # réinitialisé à chaque run_cycle
+        self._portfolio_heat: float = 0.0
+        self._circuit_breaker_actif: bool = False
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         # Migration one-shot JSON → SQLite
         self.persistance.importer_json(self.historique_trades)
         # Charge les poids optimisés du run nocturne précédent
         self._charger_poids_appris()
+        # Charge la watchlist dynamique (rotation S&P500) — persiste entre runs
+        self._charger_watchlist()
 
     # ── Helpers protection trading ────────────────────────────────────────
 
@@ -1717,6 +1852,44 @@ class BotRoute:
             return age_h >= min_intervalle_h
         except Exception:
             return True
+
+    def _charger_watchlist(self):
+        """
+        Recharge la watchlist dynamique depuis watchlist_dynamique.json.
+        CRITIQUE : sans ça, les changements de rotation sont perdus entre les runs GitHub Actions.
+        """
+        global ACTIFS_ACTIONS, ACTIFS_TOUS, SP500_CANDIDATS
+        try:
+            wl_path = DATA_DIR / "watchlist_dynamique.json"
+            if not wl_path.exists():
+                return
+            with open(wl_path, encoding="utf-8") as f:
+                data = json.load(f)
+            actifs_sauvegardes = data.get("actifs_actifs", [])
+            if not actifs_sauvegardes or len(actifs_sauvegardes) < 20:
+                return
+            # Vérifier que tous les actifs sauvegardés sont des strings valides
+            if not all(isinstance(a, str) for a in actifs_sauvegardes):
+                return
+            anciens = set(ACTIFS_ACTIONS)
+            nouveaux = set(actifs_sauvegardes)
+            ajoutes  = nouveaux - anciens
+            retires  = anciens - nouveaux
+            ACTIFS_ACTIONS = list(actifs_sauvegardes)
+            ACTIFS_TOUS    = ACTIFS_ACTIONS + ACTIFS_CRYPTO
+            # Remettre les retirés dans les candidats (s'ils n'y sont pas déjà)
+            for t in retires:
+                if t not in SP500_CANDIDATS and "/" not in t:
+                    SP500_CANDIDATS.append(t)
+            # Retirer les actifs maintenant dans la watchlist des candidats
+            SP500_CANDIDATS = [t for t in SP500_CANDIDATS if t not in ACTIFS_TOUS]
+            if ajoutes or retires:
+                self.logger.info(
+                    f"📋 Watchlist restaurée : {len(ACTIFS_ACTIONS)} actifs "
+                    f"(+{len(ajoutes)} ajoutés, -{len(retires)} retirés depuis dernier run)"
+                )
+        except Exception as e:
+            self.logger.warning(f"Chargement watchlist: {e}")
 
     def _charger_poids_appris(self):
         """Applique les poids optimisés du run nocturne si disponibles et valides."""
@@ -2077,9 +2250,10 @@ class BotRoute:
         global ACTIFS_ACTIONS, ACTIFS_TOUS, SP500_CANDIDATS
         if not SP500_CANDIDATS:
             return
-        MAX_A    = 15
+        MAX_A    = 25   # 25 candidats × ~3 runs/nuit = ~75 analyses/nuit
         day_idx  = datetime.now(timezone.utc).timetuple().tm_yday
-        start    = (day_idx * MAX_A) % len(SP500_CANDIDATS)
+        hour_idx = datetime.now(timezone.utc).hour
+        start    = ((day_idx * 24 + hour_idx) * MAX_A) % len(SP500_CANDIDATS)
         candidats = SP500_CANDIDATS[start:start + MAX_A]
         if len(candidats) < MAX_A:
             candidats += SP500_CANDIDATS[:MAX_A - len(candidats)]
@@ -2148,6 +2322,149 @@ class BotRoute:
                     }, f, indent=2)
             except Exception as e:
                 self.logger.warning(f"Watchlist save: {e}")
+
+    def _verifier_circuit_breaker(self) -> tuple:
+        """
+        Circuit Breaker : arrête le trading si pertes journalières > MAX_DAILY_LOSS_PCT.
+        Calcul basé sur les trades fermés du jour (SQLite).
+        Retourne (circuit_ouvert: bool, pnl_jour: float)
+        """
+        try:
+            today = datetime.now(timezone.utc).date().isoformat()
+            with sqlite3.connect(GestionnairePersistance.DB_PATH) as conn:
+                row = conn.execute(
+                    "SELECT SUM(pnl) FROM trades "
+                    "WHERE type IN ('VENTE', 'VENTE_AUTO') "
+                    "AND DATE(timestamp) = ?",
+                    (today,)
+                ).fetchone()
+            pnl_jour = float(row[0]) if row[0] else 0.0
+            pnl_jour_pct = abs(pnl_jour) / self.risque.capital_initial * 100 if pnl_jour < 0 else 0.0
+            ouvert = pnl_jour_pct >= MAX_DAILY_LOSS_PCT
+            if ouvert:
+                self.logger.error(
+                    f"🚨 CIRCUIT BREAKER — Pertes jour: ${pnl_jour:.2f} "
+                    f"({pnl_jour_pct:.2f}%) ≥ {MAX_DAILY_LOSS_PCT}% — trading suspendu"
+                )
+                self.discord._envoyer(
+                    f"🚨 **CIRCUIT BREAKER** | Pertes jour: ${pnl_jour:.2f} "
+                    f"({pnl_jour_pct:.2f}%) | Trading suspendu jusqu'à demain UTC"
+                )
+            return ouvert, round(pnl_jour, 2)
+        except Exception as e:
+            self.logger.warning(f"Circuit breaker: {e}")
+            return False, 0.0
+
+    def _prefetch_barres_parallele(self, actifs: list):
+        """
+        Pré-charge les barres OHLCV de tous les actifs en parallèle (8 threads).
+        Remplit le cache AlpacaClientV2 → les appels séquentiels suivants sont instantanés.
+        Groq reste séquentiel (rate-limit 25 RPM oblige).
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def fetch_one(ticker):
+            try:
+                return ticker, self.alpaca.get_barres(ticker)
+            except Exception as e:
+                self.logger.debug(f"Prefetch {ticker}: {e}")
+                return ticker, pd.DataFrame()
+
+        self.logger.info(f"⚡ Prefetch parallèle — {len(actifs)} actifs (8 threads)")
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(fetch_one, t): t for t in actifs}
+            for future in as_completed(futures, timeout=45):
+                try:
+                    ticker, df = future.result()
+                    if not df.empty:
+                        self.alpaca._cache_bars[ticker]    = df
+                        self.alpaca._cache_bars_ts[ticker] = time.time()
+                except Exception as e:
+                    self.logger.debug(f"Prefetch result: {e}")
+        self.logger.info(f"⚡ Prefetch terminé en {time.time()-t0:.1f}s")
+
+    def _monte_carlo(self) -> dict:
+        """
+        Simulation Monte Carlo sur l'historique SQLite (5 000 permutations).
+        Calcule la distribution des équités finales et le drawdown max probable.
+        Sauvegarde dans data/monte_carlo.json.
+        """
+        import random as _random
+        logger = self.logger
+        logger.info("🎲 Monte Carlo démarré…")
+        try:
+            with sqlite3.connect(GestionnairePersistance.DB_PATH) as conn:
+                rows = conn.execute(
+                    "SELECT pnl_pct FROM trades "
+                    "WHERE type IN ('VENTE','VENTE_AUTO') AND pnl_pct IS NOT NULL "
+                    "ORDER BY id DESC LIMIT 200"
+                ).fetchall()
+            if len(rows) < 20:
+                logger.info(f"Monte Carlo: données insuffisantes ({len(rows)}/20)")
+                return {}
+            returns = [r[0] / 100 for r in rows]
+            N_SIM   = 5000
+            cap     = self.risque.capital_initial
+            final_equities = []
+            max_drawdowns  = []
+            for _ in range(N_SIM):
+                sample = _random.choices(returns, k=len(returns))
+                equity = cap
+                peak   = cap
+                max_dd = 0.0
+                for r in sample:
+                    equity *= (1 + r)
+                    if equity > peak:
+                        peak = equity
+                    dd = (peak - equity) / peak if peak > 0 else 0
+                    if dd > max_dd:
+                        max_dd = dd
+                final_equities.append(equity)
+                max_drawdowns.append(max_dd)
+            final_equities.sort()
+            max_drawdowns.sort(reverse=True)
+            n        = len(final_equities)
+            p5_eq    = final_equities[int(n * 0.05)]
+            p50_eq   = final_equities[int(n * 0.50)]
+            p95_eq   = final_equities[int(n * 0.95)]
+            dd_95    = max_drawdowns[int(n * 0.05)]   # 95e percentile des DD
+            dd_med   = max_drawdowns[int(n * 0.50)]
+            ruin     = sum(1 for e in final_equities if e < cap * 0.5) / n * 100
+            # Histogramme 20 buckets
+            e_min = final_equities[0]
+            e_max = final_equities[-1]
+            bsize = (e_max - e_min) / 20 if e_max > e_min else 1
+            histo = [0] * 20
+            for e in final_equities:
+                idx = min(19, int((e - e_min) / bsize))
+                histo[idx] += 1
+            result = {
+                "timestamp":          datetime.now(timezone.utc).isoformat(),
+                "nb_simulations":     N_SIM,
+                "nb_trades":          len(returns),
+                "capital_initial":    cap,
+                "p5_equity":          round(p5_eq,  2),
+                "p50_equity":         round(p50_eq, 2),
+                "p95_equity":         round(p95_eq, 2),
+                "worst_dd_95pct":     round(dd_95   * 100, 2),
+                "median_dd":          round(dd_med  * 100, 2),
+                "ruin_prob":          round(ruin,   2),
+                "histogram":          histo,
+                "hist_min":           round(e_min,  2),
+                "hist_max":           round(e_max,  2),
+            }
+            with open(DATA_DIR / "monte_carlo.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            logger.info(
+                f"🎲 Monte Carlo terminé — {N_SIM} sim | "
+                f"P5:${p5_eq:,.0f} P50:${p50_eq:,.0f} P95:${p95_eq:,.0f} | "
+                f"DD95%:{dd_95*100:.1f}% | Ruine:{ruin:.1f}%"
+            )
+            return result
+        except Exception as e:
+            logger.warning(f"Monte Carlo: {e}")
+            return {}
 
     def _apprentissage_patterns(self, decisions: list, marche_ouvert: bool):
         """
@@ -2246,7 +2563,8 @@ class BotRoute:
                         self._definir_cooldown(ticker)
                     self.logger.info(f"[AUTO] {ticker} — {raison}")
 
-    def _analyser_actif(self, ticker: str, positions: dict, compte: dict, executer: bool = True) -> dict:
+    def _analyser_actif(self, ticker: str, positions: dict, compte: dict,
+                        executer: bool = True, kelly_base: float = None) -> dict:
         base = {
             "ticker": ticker, "action_executee": "AUCUNE",
             "score_technique": 50, "score_sentiment": 0.55,
@@ -2357,9 +2675,12 @@ class BotRoute:
                 base["raison"] = f"Mode weekend crypto — score {tech['score']:.0f} < {SEUIL_CRYPTO_WEEKEND}"
             elif not self.risque.secteur_ok(ticker, positions):
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
+            elif self._portfolio_heat >= MAX_HEAT_PCT:
+                base["raison"] = f"Portfolio heat {self._portfolio_heat:.1f}% ≥ {MAX_HEAT_PCT:.0f}% — achat bloqué"
             else:
                 montant = self.risque.allocation(
-                    dec["conviction"], tech["indicateurs"].get("atr_pct"))
+                    dec["conviction"], tech["indicateurs"].get("atr_pct"),
+                    kelly_base=kelly_base)
                 if not self.risque.capital_suffisant(compte, montant):
                     base["raison"] = f"Capital insuffisant (besoin ${montant:.0f})"
                 else:
@@ -2440,6 +2761,18 @@ class BotRoute:
             return {"meta": {"cycle": self.cycle, "erreur": str(e)},
                     "portefeuille": {}, "decisions_cycle": []}
 
+        if marche_ouvert:
+            self._auditer_positions(positions)
+
+        # Données SPY pour score momentum
+        self.df_spy = self.alpaca.get_barres("SPY")
+        # Données QQQ pour détection régime
+        self.df_qqq = self.alpaca.get_barres("QQQ")
+        # ── Pré-chargement parallèle des barres (8 threads, Groq reste séquentiel) ──
+        self._prefetch_barres_parallele(ACTIFS_TOUS)
+        # Régime de marché
+        regime_marche = self.regime_det.detecter(self.df_spy, self.df_qqq)
+
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
         # Alerte Discord préventive à 3% de drawdown (avant la pause à 5%)
         dd_pct = max(0.0, (self.risque.capital_initial - compte["equity"]) / self.risque.capital_initial * 100)
@@ -2448,20 +2781,32 @@ class BotRoute:
                 f"⚠️ **ROUTE/v4 — Alerte drawdown** : {dd_pct:.2f}% "
                 f"(limite pause : 5%) | Equity : ${compte['equity']:,.2f}"
             )
-        if marche_ouvert:
-            self._auditer_positions(positions)
 
-        # Données SPY pour score momentum
-        self.df_spy = self.alpaca.get_barres("SPY")
-        # Données QQQ pour détection régime
-        self.df_qqq = self.alpaca.get_barres("QQQ")
-        # Régime de marché
-        regime_marche = self.regime_det.detecter(self.df_spy, self.df_qqq)
+        # ── Circuit Breaker journalier ──────────────────────────────────────────
+        circuit_ouvert, pnl_jour = self._verifier_circuit_breaker()
+        self._circuit_breaker_actif = circuit_ouvert
 
+        # ── Portfolio Heat ──────────────────────────────────────────────────────
+        self._portfolio_heat = self.risque.calculer_portfolio_heat(positions, compte["equity"])
+        if self._portfolio_heat >= MAX_HEAT_PCT:
+            self.logger.warning(f"🌡️  Portfolio heat {self._portfolio_heat:.1f}% ≥ {MAX_HEAT_PCT:.0f}%")
+
+        # ── Kelly Criterion (une fois par cycle) ────────────────────────────────
+        kelly_base = None
+        try:
+            with sqlite3.connect(GestionnairePersistance.DB_PATH) as _conn:
+                kelly_base = self.risque.calculer_kelly_base(_conn)
+            self.logger.info(f"💰 Kelly base: ${kelly_base:.0f} (standard: ${ALLOCATION_BASE:.0f})")
+        except Exception:
+            pass
+
+        # Marché ouvert + pas de circuit breaker = exécution réelle
+        executer = marche_ouvert and not circuit_ouvert
         decisions = []
         for ticker in ACTIFS_TOUS:
-            time.sleep(0.05)
-            d = self._analyser_actif(ticker, positions, compte, executer=marche_ouvert)
+            time.sleep(0.02)   # réduit car prefetch parallèle a déjà chargé les données
+            d = self._analyser_actif(ticker, positions, compte,
+                                     executer=executer, kelly_base=kelly_base)
             decisions.append(d)
 
         # ── Shadow Portfolio — simulation sans capital réel ───────────────────
@@ -2508,9 +2853,13 @@ class BotRoute:
             if wday >= 5 and self._peut_executer_routine("correlations.json", 12.0):
                 self._mettre_a_jour_correlations()
 
-            # Rotation watchlist — toutes les 6h la nuit
-            if self._peut_executer_routine("watchlist_dynamique.json", 6.0):
+            # Rotation watchlist — toutes les 3h la nuit (~75 candidats/nuit)
+            if self._peut_executer_routine("watchlist_dynamique.json", 3.0):
                 self._rotation_watchlist(positions)
+
+            # Monte Carlo — une fois par nuit à 2h UTC (max 1×/23h)
+            if heure == 2 and self._peut_executer_routine("monte_carlo.json", 23.0):
+                self._monte_carlo()
 
         # Veille Reddit 24/7 (cache 30 min)
         veille_reddit = self.reddit.analyser(ACTIFS_TOUS + SP500_CANDIDATS[:20])
@@ -2595,6 +2944,20 @@ class BotRoute:
             "regime_marche":     regime_marche,
             "veille_reddit":     veille_reddit,
             "stress_test":       stress_test,
+            "circuit_breaker": {
+                "actif":    circuit_ouvert,
+                "pnl_jour": pnl_jour,
+                "seuil_pct": MAX_DAILY_LOSS_PCT,
+            },
+            "portfolio_heat": {
+                "heat_pct":  self._portfolio_heat,
+                "max_pct":   MAX_HEAT_PCT,
+                "bloque":    self._portfolio_heat >= MAX_HEAT_PCT,
+            },
+            "kelly": {
+                "base_usd":    kelly_base or ALLOCATION_BASE,
+                "standard_usd": ALLOCATION_BASE,
+            },
             "metriques": metriques,
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
