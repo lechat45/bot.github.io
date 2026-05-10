@@ -282,6 +282,9 @@ jobs:
         cp data/watchlist_dynamique.json   _site/data/watchlist_dynamique.json   2>/dev/null || true
         cp data/patterns_appris.json       _site/data/patterns_appris.json       2>/dev/null || true
         cp data/monte_carlo.json           _site/data/monte_carlo.json           2>/dev/null || true
+        cp manifest.json               _site/manifest.json                2>/dev/null || true
+        cp sw.js                       _site/sw.js                        2>/dev/null || true
+        cp icon.svg                    _site/icon.svg                     2>/dev/null || true
         echo "Contenu _site/ :"
         ls -lh _site/
         ls -lh _site/data/ 2>/dev/null || echo "(data/ vide)"
