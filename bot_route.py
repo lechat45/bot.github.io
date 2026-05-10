@@ -134,7 +134,7 @@ MACD_LENT           = 26
 MACD_SIGNAL_PERIODE = 9
 RSI_PERIODE         = 14
 RSI_SURVENTE        = 35
-RSI_SURACHAT        = 65
+RSI_SURACHAT        = 65   # seuil scoring indicateur (inchangé)
 RSI_SURVENTE_EXT    = 20
 RSI_SURACHAT_EXT    = 80
 BB_PERIODE          = 20
@@ -229,18 +229,29 @@ SECTEURS = {
     "AUTRES":  ["KO","DAL","BA"],
 }
 MAX_PAR_SECTEUR = 2
+MAX_CRYPTO_EXPOSURE_PCT = 25.0  # Maximum 25% du capital total en crypto
 
 DATA_DIR    = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json")).parent
 JSON_SORTIE = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
 INTERVALLE  = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
+COOLDOWNS_FILE = DATA_DIR / "cooldowns.json"   # persistance cooldowns entre runs
 
 # ── Protection trading ────────────────────────────────────────────────────
 MAX_ACHATS_PAR_CYCLE  = 3       # Max nouveaux achats par cycle (actions)
 MAX_ACHATS_CRYPTO_NUIT= 5       # Max achats crypto quand marché actions fermé (24/7)
 COOLDOWN_APRES_ACHAT  = 1800    # 30 min cooldown après un achat (actions)
 COOLDOWN_CRYPTO_NUIT  = 900     # 15 min cooldown crypto hors marché (plus réactif)
+RSI_MAX_ACHAT         = 76      # Bloquer achat si RSI > 76 — ajusté d/après données réelles
+                                # (NVDA RSI=83, INTC RSI=84, TSLA RSI=74-75 → pertes fréquentes)
 SEUIL_CRYPTO_WEEKEND  = 55      # Score minimum crypto le weekend (baissé: 70→55)
 BARRES_CACHE_TTL      = 300     # Cache OHLC 5 min pour éviter les requêtes redondantes
+
+# ── Meme stocks — stop-loss serré (haute volatilité) ─────────────────────
+STOP_LOSS_MEME        = 0.04    # 4% SL pour meme stocks (vs 3% standard)
+MEME_STOCKS           = {"AMC", "GME", "HOOD", "DOGE/USD"}
+                                # AMC/GME : volatilité extrême, squeeze imprévisible
+                                # HOOD : corrélé retail sentiment
+                                # DOGE/USD : crypto meme, drawdowns violents
 
 # ── Mode Crypto Nuit/Weekend ─────────────────────────────────────────────
 # Quand le marché actions est fermé, le bot se concentre sur les cryptos (24/7).
@@ -693,6 +704,18 @@ class MoteurIndicateurs:
                     points_buy  += POIDS["rsi"] * 0.3
         except Exception as e:
             self.logger.debug(f"RSI {ticker}: {e}")
+
+        # ── 5b. Momentum 4h crypto (8 bougies × 30min) ───────────────────
+        try:
+            if "/" in ticker and len(df) >= 8:
+                ret_4h = (float(df["close"].iloc[-1]) / float(df["close"].iloc[-8]) - 1) * 100
+                ind["momentum_4h"] = round(ret_4h, 3)
+                if ret_4h > 2.0:    # +2% sur 4h → signal fort haussier
+                    points_buy += 5
+                elif ret_4h < -2.0:  # -2% sur 4h → signal fort baissier
+                    points_sell += 5
+        except Exception as e:
+            self.logger.debug(f"Momentum4h {ticker}: {e}")
 
         # ── 6. Bollinger Bands ────────────────────────────────────────────
         try:
@@ -2193,9 +2216,15 @@ class GestionnaireRisque:
         self.logger = logging.getLogger("Risque")
 
     def verifier_stop_loss(self, pos: dict) -> bool:
-        plpc = pos.get("unrealized_plpc", 0)
-        if plpc <= -(STOP_LOSS_PCT * 100):
-            self.logger.warning(f"🛑 STOP-LOSS {pos['ticker']}: {plpc:.2f}%")
+        ticker = pos.get("ticker", "")
+        plpc   = pos.get("unrealized_plpc", 0)
+        # Stop-loss plus serré pour les meme stocks (4% vs 3% standard)
+        sl_pct = STOP_LOSS_MEME if ticker in MEME_STOCKS else STOP_LOSS_PCT
+        if plpc <= -(sl_pct * 100):
+            self.logger.warning(
+                f"🛑 STOP-LOSS {ticker}: {plpc:.2f}% "
+                f"(seuil {'MEME' if ticker in MEME_STOCKS else 'STD'} -{sl_pct*100:.0f}%)"
+            )
             return True
         return False
 
@@ -2458,8 +2487,9 @@ class BotRoute:
         self.historique_valeur: list = []
         self.pause_drawdown    = False
         self.df_spy: pd.DataFrame = pd.DataFrame()
-        self._cooldown: dict   = {}   # ticker → timestamp fin de cooldown
-        self._achats_ce_cycle  = 0    # réinitialisé à chaque run_cycle
+        self._cooldown: dict   = {}   # ticker → timestamp fin de cooldown (persisté)
+        self._achats_ce_cycle  = 0    # réinitialisé à chaque run_cycle (actions)
+        self._achats_crypto_cycle = 0  # compteur séparé pour les cryptos
         self._portfolio_heat: float = 0.0
         self._circuit_breaker_actif: bool = False
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -2469,6 +2499,8 @@ class BotRoute:
         self._charger_poids_appris()
         # Charge la watchlist dynamique (rotation S&P500) — persiste entre runs
         self._charger_watchlist()
+        # Charge les cooldowns depuis le fichier JSON (persistant entre runs GitHub Actions)
+        self._charger_cooldowns()
 
     # ── Helpers protection trading ────────────────────────────────────────
 
@@ -2480,6 +2512,36 @@ class BotRoute:
         duree = COOLDOWN_CRYPTO_NUIT if (crypto_nuit and "/" in ticker) else COOLDOWN_APRES_ACHAT
         self._cooldown[ticker] = time.time() + duree
         self.logger.debug(f"Cooldown {ticker} : {duree // 60} min")
+        self._sauvegarder_cooldowns()
+
+    def _charger_cooldowns(self):
+        """Charge les cooldowns depuis cooldowns.json — persistant entre runs GitHub Actions."""
+        try:
+            if COOLDOWNS_FILE.exists():
+                with open(COOLDOWNS_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+                now = time.time()
+                # Ne garder que les cooldowns non expirés
+                self._cooldown = {k: v for k, v in data.items() if v > now}
+                expires = {k: int((v - now) / 60) for k, v in self._cooldown.items()}
+                if expires:
+                    self.logger.info(f"⏳ Cooldowns chargés : {expires}")
+                else:
+                    self.logger.debug("Cooldowns.json vide ou tous expirés")
+        except Exception as e:
+            self.logger.warning(f"Erreur chargement cooldowns : {e}")
+            self._cooldown = {}
+
+    def _sauvegarder_cooldowns(self):
+        """Sauvegarde les cooldowns actifs dans cooldowns.json."""
+        try:
+            COOLDOWNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            now = time.time()
+            actifs = {k: v for k, v in self._cooldown.items() if v > now}
+            with open(COOLDOWNS_FILE, "w", encoding="utf-8") as f:
+                json.dump(actifs, f, indent=2)
+        except Exception as e:
+            self.logger.warning(f"Erreur sauvegarde cooldowns : {e}")
 
     def _actifs_correles(self, ticker: str, positions: dict) -> bool:
         """Retourne True si un actif fortement corrélé est déjà en position."""
@@ -3278,6 +3340,20 @@ class BotRoute:
         ticker_norm   = ticker.replace("/", "")
         dans_position = ticker in positions or ticker_norm in positions
 
+        # Limite exposition crypto : si déjà > 15% equity dans ce ticker, ne pas racheter
+        if "/" in ticker and not dans_position:
+            pos_key = ticker_norm  # ex: "BTCUSD"
+            pos_data = positions.get(ticker) or positions.get(pos_key)
+            if pos_data:
+                val = float(pos_data.get("market_value", 0))
+                equity = float(compte.get("equity", 100000))
+                if val > equity * 0.15:
+                    dans_position = True
+                    self.logger.info(
+                        f"[EXPO] {ticker} déjà à {val/equity*100:.1f}% equity "
+                        f"(>${val:.0f}) — achat bloqué (> 15%)"
+                    )
+
         # ── 1. Données OHLC via SDK Alpaca ────────────────────────────────
         # Mode nuit crypto : barres 30min (plus réactives que 1h)
         if mode_crypto_nuit and "/" in ticker:
@@ -3352,10 +3428,18 @@ class BotRoute:
                 "biais": "neutre", "facteurs_positifs": [],
                 "facteurs_negatifs": [], "source": "skip"}
 
+        # ── Filtre volatilité excessive crypto nuit ───────────────────────
+        if mode_crypto_nuit and "/" in ticker:
+            atr_pct = tech["indicateurs"].get("atr_pct", 0) or 0
+            if atr_pct > 8.0:
+                base["raison"] = f"Volatilité crypto excessive (ATR {atr_pct:.1f}% > 8%) — nuit"
+                return base
+
         # ── Mode crypto nuit : boost score + seuil abaissé ───────────────────
         if mode_crypto_nuit and "/" in ticker:
-            # +15% boost sur score technique (crypto seule active, signaux plus purs)
-            tech["score"] = min(100.0, tech["score"] * 1.15)
+            # +15% boost uniquement si indicateurs bien calculés (df >= 50 barres)
+            if len(df) >= 50:
+                tech["score"] = min(100.0, tech["score"] * 1.15)
             base["score_technique"] = tech["score"]
             # Seuil d'analyse abaissé en mode nuit
             seuil_groq_crypto = CRYPTO_NUIT_SEUIL_BUY
@@ -3422,15 +3506,36 @@ class BotRoute:
             return base
 
         if dec["action"] == "ACHAT" and not self.pause_drawdown:
+            # ── Limite exposition totale crypto (avant tous les autres garde-fous) ──
+            if "/" in ticker and not dans_position:
+                total_crypto_usd = sum(
+                    float(p.get("market_value", 0))
+                    for t, p in positions.items()
+                    if "/" in t or t.upper() in {
+                        "BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD",
+                        "AVAXUSD", "LINKUSD", "LTCUSD", "BCHUSD",
+                        "XRPUSD", "UNIUSD"
+                    }
+                )
+                equity = float(compte.get("equity", 100000))
+                if total_crypto_usd > equity * MAX_CRYPTO_EXPOSURE_PCT / 100:
+                    base["raison"] = (
+                        f"Limite crypto {MAX_CRYPTO_EXPOSURE_PCT:.0f}% atteinte "
+                        f"({total_crypto_usd / equity * 100:.1f}%)"
+                    )
+                    return base
+
             # ── Garde-fous ordonnés par priorité ─────────────────────────
             if dans_position:
                 base["raison"] = "Position déjà ouverte — achat ignoré"
             elif self._en_cooldown(ticker):
                 reste = int(self._cooldown[ticker] - time.time())
                 base["raison"] = f"Cooldown actif — {reste // 60}min {reste % 60}s restants"
-            elif self._achats_ce_cycle >= (MAX_ACHATS_CRYPTO_NUIT if mode_crypto_nuit else MAX_ACHATS_PAR_CYCLE):
+            elif "/" in ticker and self._achats_crypto_cycle >= (MAX_ACHATS_CRYPTO_NUIT if mode_crypto_nuit else MAX_ACHATS_PAR_CYCLE):
                 limite = MAX_ACHATS_CRYPTO_NUIT if mode_crypto_nuit else MAX_ACHATS_PAR_CYCLE
-                base["raison"] = f"Limite {limite} achats/cycle atteinte {'(mode crypto nuit)' if mode_crypto_nuit else ''}"
+                base["raison"] = f"Limite {limite} achats crypto/cycle atteinte {'(mode crypto nuit)' if mode_crypto_nuit else ''}"
+            elif "/" not in ticker and self._achats_ce_cycle >= MAX_ACHATS_PAR_CYCLE:
+                base["raison"] = f"Limite {MAX_ACHATS_PAR_CYCLE} achats actions/cycle atteinte"
             elif self._actifs_correles(ticker, positions):
                 base["raison"] = "Actif corrélé déjà en position"
             elif "/" in ticker and tech["score"] < SEUIL_CRYPTO_WEEKEND and not mode_crypto_nuit:
@@ -3448,6 +3553,19 @@ class BotRoute:
             elif self.yahoo.est_blackout_earnings(ticker):
                 base["raison"] = "📅 EARNINGS BLACKOUT — résultats ±3j"
                 base["earnings_blackout"] = True
+            # Q8: Filtre RSI suracheté — bloquer achat si RSI > RSI_MAX_ACHAT (76)
+            elif tech["indicateurs"].get("rsi") and tech["indicateurs"]["rsi"] > RSI_MAX_ACHAT:
+                base["raison"] = f"RSI suracheté {tech['indicateurs']['rsi']:.1f} > {RSI_MAX_ACHAT} — achat bloqué"
+            # Q9: Filtre qualité signal — sans HMA crossover, exiger score > 68 (actions seules)
+            # Basé sur les données réelles : sans crossover + score < 68 → pertes fréquentes
+            # (SPY score=62.5 RSI=77, MSFT score=63.1, PENN score=63.1, COIN score=61.9)
+            elif (not tech.get("croisement_hma") and
+                  dec["score_fusionne"] < 68 and
+                  "/" not in ticker):
+                base["raison"] = (
+                    f"Qualité insuffisante sans HMA crossover "
+                    f"(score {dec['score_fusionne']:.0f} < 68) — signal trop faible"
+                )
             else:
                 montant = self.risque.allocation(
                     dec["conviction"], tech["indicateurs"].get("atr_pct"),
@@ -3474,7 +3592,10 @@ class BotRoute:
                         self.historique_trades.append(trade)
                         self.persistance.sauvegarder(trade)
                         self._definir_cooldown(ticker, crypto_nuit=mode_crypto_nuit)
-                        self._achats_ce_cycle += 1
+                        if "/" in ticker:
+                            self._achats_crypto_cycle += 1
+                        else:
+                            self._achats_ce_cycle += 1
                         self._sauvegarder_historique()
                         self.discord.notifier_achat(
                             ticker, montant, tech["prix"],
@@ -3673,7 +3794,8 @@ class BotRoute:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
-        self._achats_ce_cycle = 0   # reset compteur achats par cycle
+        self._achats_ce_cycle = 0      # reset compteur achats actions par cycle
+        self._achats_crypto_cycle = 0  # reset compteur achats crypto par cycle
         marche_ouvert = self.alpaca.marche_ouvert()
 
         # ── Fear & Greed (cache 1h) ─────────────────────────────────────────

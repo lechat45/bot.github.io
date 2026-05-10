@@ -277,12 +277,13 @@
       font-family: var(--mono); font-size: 28px; font-weight: 700;
       color: var(--t1); letter-spacing: -1.5px; line-height: 1;
     }
-    .met-val.pos { color: var(--acid); text-shadow: 0 0 18px var(--acid-30); }
+    .met-val.pos { color: var(--grn); text-shadow: 0 0 18px rgba(0,255,136,0.3); }
     .met-val.neg { color: var(--red);  text-shadow: 0 0 18px var(--red-30); }
     .met-val.cyn { color: var(--cyn);  text-shadow: 0 0 18px var(--cyn-30); }
     .met-val.amb { color: var(--amb); }
     .met-val.mag { color: var(--mag);  text-shadow: 0 0 18px var(--mag-30); }
     .met-val.blu { color: var(--blu); }
+    .met-val.grn { color: var(--grn); text-shadow: 0 0 18px rgba(0,255,136,0.3); }
     .met-sub { font-family: var(--mono); font-size: 9px; color: var(--t2); margin-top: 8px; }
     .met-foot {
       margin-top: 8px; height: 24px; position: relative;
@@ -740,9 +741,10 @@
     .areason {
       font-family: var(--mono); font-size: 7.5px; color: var(--t2);
       margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--ln);
-      line-height: 1.4; max-height: 26px; overflow: hidden;
+      line-height: 1.5; max-height: 32px; overflow: hidden;
+      font-style: italic;
     }
-    .areason .lab { color: var(--mag); letter-spacing: 1px; font-weight: 700; }
+    .areason .lab { color: var(--mag); letter-spacing: 1px; font-weight: 700; font-style: normal; }
 
     /* Filtres grille actifs */
     .afilters {
@@ -829,6 +831,37 @@
     /* ── Card details toggle ─── */
     .card-details{transition:all .3s}.card-details.hidden{display:none!important}
     .card-summary{cursor:pointer}.card-summary:hover{background:rgba(0,255,242,0.04)}
+
+    /* ── Skeleton loader ─────────────────────────────────────── */
+    .skeleton{background:linear-gradient(90deg,rgba(0,255,242,0.05) 25%,rgba(0,255,242,0.12) 50%,rgba(0,255,242,0.05) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px;height:14px;margin:4px 0}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* ── Animation pulse-grn (pour le bot-health) ───────────── */
+    @keyframes pulse-grn {
+      0%,100%{box-shadow:0 0 0 0 rgba(0,255,136,0.4)}
+      50%    {box-shadow:0 0 0 5px rgba(0,255,136,0)}
+    }
+
+    /* ── Responsive mobile 768px ─────────────────────────────── */
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr !important; }
+      .hdr { flex-direction: column; gap: 8px; }
+      .tab-nav { overflow-x: auto; white-space: nowrap; }
+      .tab-btn { font-size: 10px; padding: 6px 12px; }
+      .two-col { grid-template-columns: 1fr !important; }
+      .mg { grid-template-columns: 1fr !important; }
+      .sysrow { grid-template-columns: 1fr !important; }
+      .mets { grid-template-columns: repeat(2,1fr) !important; }
+    }
+
+    /* ── Responsive mobile 480px ─────────────────────────────── */
+    @media (max-width: 480px) {
+      .shell { padding: 0 8px 40px; }
+      .tape { display: none; }
+      .mets { grid-template-columns: 1fr !important; }
+      .logo-name { font-size: 26px; }
+      .mc-stats { grid-template-columns: repeat(2,1fr); }
+    }
   </style>
 </head>
 <body>
@@ -869,6 +902,10 @@
       <span class="pill" id="pill-status">● Init…</span>
       <span class="pill pause" id="pill-pause" style="display:none">⏸ DRAWDOWN</span>
       <span id="crypto-nuit-badge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.3);color:#00e5ff;font:600 10px 'JetBrains Mono',monospace">₿ CRYPTO 24/7</span>
+      <div id="bot-health" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3)">
+        <span id="health-dot" style="width:8px;height:8px;border-radius:50%;background:var(--grn);box-shadow:0 0 8px var(--grn);animation:pulse-grn 2s infinite"></span>
+        <span id="health-label" style="font:600 10px 'JetBrains Mono',monospace;color:var(--grn);letter-spacing:1px">BOT ACTIF</span>
+      </div>
     </div>
   </div>
 
@@ -1061,7 +1098,11 @@
       <span class="phd-r" id="a-count">0 actifs</span>
     </div>
     <div class="agrid" id="agrid">
-      <div class="empty" style="grid-column:1/-1">Chargement…</div>
+      <div class="empty" style="grid-column:1/-1">
+        <div class="skeleton" style="width:80%;margin:0 auto 6px"></div>
+        <div class="skeleton" style="width:60%;margin:0 auto 6px"></div>
+        <div class="skeleton" style="width:70%;margin:0 auto"></div>
+      </div>
     </div>
   </div>
 
@@ -1610,6 +1651,37 @@ function render(data) {
 
   $('footer').innerHTML =
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
+
+  // Santé du bot
+  const healthDot = document.getElementById('health-dot');
+  const healthLabel = document.getElementById('health-label');
+  const healthBox = document.getElementById('bot-health');
+  if (healthDot && healthLabel && healthBox) {
+    const lastUpdate = new Date(data.meta?.timestamp || 0);
+    const ageMin = (Date.now() - lastUpdate) / 60000;
+    if (ageMin < 10) {
+      healthDot.style.background = 'var(--grn)';
+      healthDot.style.boxShadow = '0 0 8px var(--grn)';
+      healthLabel.style.color = 'var(--grn)';
+      healthLabel.textContent = 'BOT ACTIF';
+      healthBox.style.background = 'rgba(0,255,136,0.1)';
+      healthBox.style.borderColor = 'rgba(0,255,136,0.3)';
+    } else if (ageMin < 30) {
+      healthDot.style.background = 'var(--amb)';
+      healthDot.style.boxShadow = '0 0 8px var(--amb)';
+      healthLabel.style.color = 'var(--amb)';
+      healthLabel.textContent = 'LENT';
+      healthBox.style.background = 'rgba(255,149,0,0.1)';
+      healthBox.style.borderColor = 'rgba(255,149,0,0.3)';
+    } else {
+      healthDot.style.background = 'var(--red)';
+      healthDot.style.boxShadow = '0 0 8px var(--red)';
+      healthLabel.style.color = 'var(--red)';
+      healthLabel.textContent = 'HORS LIGNE';
+      healthBox.style.background = 'rgba(255,56,96,0.1)';
+      healthBox.style.borderColor = 'rgba(255,56,96,0.3)';
+    }
+  }
 }
 
 /* ── Sparkline equity dans la carte hero (Bezier) ─────────── */
@@ -1958,7 +2030,7 @@ function renderAssets(decs, positions) {
       const pct = Math.max(0, Math.min(100, rsi));
       const r=11, cx=14, cy=14, circ=Math.PI*r; // demi-cercle
       const fill = (pct/100)*circ;
-      const rc   = rsi>65?'#ff3860':rsi<35?'#b8ff00':'#ff9500';
+      const rc   = rsi>70?'var(--red)':rsi<30?'var(--grn)':'rgba(255,255,255,0.75)';
       const startX = cx-r, startY = cy, endX = cx+r, endY = cy;
       rsiArc = `<svg width="28" height="16" viewBox="0 0 28 16" style="display:inline-block;vertical-align:middle;margin-right:3px" title="RSI ${rsi.toFixed(0)}">
         <path d="M ${startX},${startY} A ${r},${r} 0 0,1 ${endX},${endY}" fill="none"
@@ -2002,7 +2074,7 @@ function renderAssets(decs, positions) {
     if (ind.bb_upper && ind.bb_lower && prix) {
       const range  = ind.bb_upper - ind.bb_lower || 1;
       const posPct = Math.max(0, Math.min(100, (prix - ind.bb_lower) / range * 100));
-      const bbCol  = posPct > 75 ? '#ff3860' : posPct < 25 ? '#b8ff00' : '#00fff2';
+      const bbCol  = posPct > 75 ? 'var(--red)' : posPct < 25 ? 'var(--grn)' : 'var(--cyn)';
       bbBlock = `<div class="bb-bar" title="BB pos ${posPct.toFixed(0)}% · L:${ind.bb_lower?.toFixed(2)} M:${ind.bb_mid?.toFixed(2)} U:${ind.bb_upper?.toFixed(2)}">
         <div class="bb-mark" style="left:${posPct}%;background:${bbCol};box-shadow:0 0 5px ${bbCol}"></div>
       </div>`;
@@ -2039,7 +2111,11 @@ function renderAssets(decs, positions) {
         ${rsiArc}<span class="cv-b ${cvCls}">${conv}</span><span class="biais ${biaisCls}">${biaisTxt}</span>${confBadge}
       </div>
       ${chips.length?`<div class="indrow">${chips.join('')}</div>`:''}
-      ${raison?`<div class="areason"><span class="lab">RAISON</span> ${esc(raison)}</div>`:''}
+        <div style="margin-top:5px;display:flex;align-items:center;gap:5px">
+        <span style="font:700 9px 'JetBrains Mono',monospace;letter-spacing:1px;padding:2px 7px;border-radius:3px;${sig==='BUY'?'background:rgba(0,255,136,0.15);color:var(--grn);border:1px solid rgba(0,255,136,0.3)':sig==='SELL'?'background:rgba(255,56,96,0.15);color:var(--red);border:1px solid rgba(255,56,96,0.3)':'background:rgba(0,255,242,0.08);color:var(--cyn);border:1px solid rgba(0,255,242,0.2)'}">${sig==='BUY'?'▲ BUY':sig==='SELL'?'▼ SELL':'● HOLD'}</span>
+        <span style="font:600 9px 'JetBrains Mono',monospace;color:${fCol}">FUS ${fus.toFixed(0)}/100</span>
+      </div>
+    ${raison?`<div class="areason"><span class="lab">RAISON</span> <em style="font-style:italic;color:var(--t2)">${esc(raison)}</em></div>`:''}
     </div>`;
   }).join('');
 }
@@ -2200,12 +2276,12 @@ function renderChart(hist, init) {
   svg.innerHTML = `
     <defs>
       <linearGradient id="gUp" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#b8ff00" stop-opacity=".38"/>
-        <stop offset="100%" stop-color="#b8ff00" stop-opacity=".02"/>
+        <stop offset="0%"   stop-color="#00ff88" stop-opacity=".45"/>
+        <stop offset="100%" stop-color="#00ff88" stop-opacity=".03"/>
       </linearGradient>
       <linearGradient id="gDn" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#ff3860" stop-opacity=".02"/>
-        <stop offset="100%" stop-color="#ff3860" stop-opacity=".30"/>
+        <stop offset="0%"   stop-color="#ff3860" stop-opacity=".03"/>
+        <stop offset="100%" stop-color="#ff3860" stop-opacity=".40"/>
       </linearGradient>
       <linearGradient id="gFill" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%"   stop-color="${col}" stop-opacity=".12"/>
@@ -2236,12 +2312,12 @@ function renderChart(hist, init) {
     ${gridLines.join('')}
     ${gridV.join('')}
 
-    <!-- Ligne capital initial -->
+    <!-- Ligne capital initial (référence blanche pointillée) -->
     <line x1="${P.l}" y1="${baseY.toFixed(1)}" x2="${(P.l+iW).toFixed(0)}" y2="${baseY.toFixed(1)}"
-          stroke="rgba(255,149,0,0.38)" stroke-width="1" stroke-dasharray="5,6"/>
+          stroke="rgba(255,255,255,0.55)" stroke-width="1.2" stroke-dasharray="6,5"/>
     <text x="${(P.l + 6).toFixed(0)}" y="${(baseY - 6).toFixed(0)}"
           font-size="9" font-family="JetBrains Mono,monospace" letter-spacing="1.2"
-          fill="rgba(255,149,0,0.60)">CAPITAL ${fU0(init)}</text>
+          fill="rgba(255,255,255,0.50)">CAPITAL ${fU0(init)}</text>
 
     <!-- Aires gain / perte -->
     <path d="${areaUp}" fill="url(#gUp)" clip-path="url(#clip-chart)" opacity="${up?1:0}"/>

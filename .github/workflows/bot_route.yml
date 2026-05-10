@@ -249,7 +249,7 @@ jobs:
                 data/poids_appris.json data/backtest_results.json \
                 data/groq_warmup.json data/correlations.json \
                 data/shadow_portfolio.json data/watchlist_dynamique.json data/patterns_appris.json \
-                data/monte_carlo.json 2>/dev/null || true
+                data/monte_carlo.json data/cooldowns.json 2>/dev/null || true
 
         if git diff --cached --quiet; then
           echo "ℹ️  Aucune modification — commit ignoré"
