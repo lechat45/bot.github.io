@@ -1,0 +1,27 @@
+{
+  "name": "ROUTE/v4 — Bot Trading Algo",
+  "short_name": "ROUTE/v4",
+  "description": "Bot de trading algorithmique 24/7 — Alpaca + pandas-ta + Groq AI",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0e1a",
+  "theme_color": "#00e5ff",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"],
+  "screenshots": []
+}

@@ -76,10 +76,15 @@ VARIABLES D'ENVIRONNEMENT REQUISES (GitHub Secrets) :
 =============================================================================
 """
 
-import json, time, os, signal, sys, logging, math, sqlite3, statistics
+import json, time, os, signal, sys, logging, math, sqlite3, statistics, warnings
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
+
+# Supprimer les warnings déprecation internes de pandas-ta (ex: 'd' vs 'D' dans Ichimoku)
+warnings.filterwarnings("ignore", message=".*'d' is deprecated.*")
+warnings.filterwarnings("ignore", category=FutureWarning, module="pandas_ta")
+warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
 # ── Dépendances tierces ───────────────────────────────────────────────────
 try:
@@ -157,6 +162,17 @@ POIDS = {
 # ── Gestion du risque avancée ────────────────────────────────────────
 MAX_HEAT_PCT       = 8.0    # Portfolio heat max — bloque achats si > 8%
 MAX_DAILY_LOSS_PCT = 3.0    # Circuit breaker — stop trading si pertes jour > 3%
+
+# ── Portefeuille Long Terme — Sacha Pro (EXPÉRIMENTAL) ──────────────────
+# Petit budget séparé géré UNIQUEMENT par les crossovers EMA daily.
+# Le bot court-terme ne peut PAS vendre ces positions.
+LT_ACTIF             = True    # Activer le portefeuille LT (mettre False pour désactiver)
+LT_ALLOC_PCT         = 5.0     # % de l'equity par position (ex: 5% de 10k = 500$)
+LT_MAX_POSITIONS     = 3       # Maximum de positions LT simultanées
+LT_MIN_USD           = 150     # Montant minimum par position LT ($)
+LT_MAX_USD           = 800     # Montant maximum par position LT ($) — sécurité expérimentale
+LT_REQUIRE_CROSSOVER = True    # True = n'achète QUE sur crossover (signal fort)
+                                # False = achète aussi sur tendance haussière (plus actif)
 
 # ── Seuils de décision ───────────────────────────────────────────────────
 SEUIL_TECH_BUY          = 60
@@ -365,6 +381,46 @@ class AlpacaClientV2:
 
         except Exception as e:
             self.logger.warning(f"Barres {ticker} : {e}")
+            return pd.DataFrame()
+
+    def get_barres_daily(self, ticker: str, jours: int = 90) -> pd.DataFrame:
+        """
+        Récupère les barres DAILY. Cache 30 min (les barres daily ne changent qu'une fois/j).
+        Utilisé par StrategieSachaPro (EMA50 daily nécessite ≥ 60 jours).
+        """
+        cache_key = f"{ticker}_daily"
+        now = time.time()
+        if (cache_key in self._cache_bars and
+                (now - self._cache_bars_ts.get(cache_key, 0)) < 1800):
+            return self._cache_bars[cache_key]
+        try:
+            end   = datetime.now(timezone.utc)
+            start = end - timedelta(days=jours + 10)
+            start_str = start.strftime("%Y-%m-%d")
+            end_str   = end.strftime("%Y-%m-%d")
+
+            if "/" in ticker:
+                df = self.api.get_crypto_bars(
+                    ticker, TimeFrame.Day,
+                    start=start_str, end=end_str, limit=jours + 20
+                ).df
+            else:
+                df = self.api.get_bars(
+                    ticker, TimeFrame.Day,
+                    start=start_str, end=end_str, limit=jours + 20,
+                    feed="iex"
+                ).df
+
+            if df is None or df.empty:
+                return pd.DataFrame()
+
+            df.columns = [c.lower() for c in df.columns]
+            df = df.sort_index()
+            self._cache_bars[cache_key]    = df
+            self._cache_bars_ts[cache_key] = time.time()
+            return df
+        except Exception as e:
+            self.logger.debug(f"Barres daily {ticker}: {e}")
             return pd.DataFrame()
 
     def soumettre_ordre(self, ticker: str, montant_usd: float,
@@ -662,8 +718,10 @@ class MoteurIndicateurs:
         # ── 11. Ichimoku Cloud — filtre de tendance primaire ─────────────
         try:
             if len(df) >= 60:
-                ich_result = ta.ichimoku(df["high"], df["low"], df["close"],
-                                         tenkan=9, kijun=26, senkou=52)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    ich_result = ta.ichimoku(df["high"], df["low"], df["close"],
+                                             tenkan=9, kijun=26, senkou=52)
                 if ich_result and ich_result[0] is not None and not ich_result[0].empty:
                     ich_df   = ich_result[0]
                     span_a_c = [c for c in ich_df.columns if "ISA" in c]
@@ -1046,6 +1104,509 @@ Réponds UNIQUEMENT en JSON valide :
             "resume": f"Gemini indisponible ({raison[:60]})",
             "facteurs_positifs": [], "facteurs_negatifs": [],
             "biais": "neutre", "source": "fallback",
+        }
+
+
+# =============================================================================
+# [MODULE 4e] FearGreedIndex — Indice Fear & Greed (alternative.me)
+# =============================================================================
+
+class FearGreedIndex:
+    """
+    Récupère l'indice Fear & Greed via alternative.me (gratuit, sans clé).
+    0 = Peur extrême (opportunité d'achat) | 100 = Euphorie (prudence).
+    Cache 1 heure — inutile de rafraîchir plus souvent.
+    """
+    URL       = "https://api.alternative.me/fng/?limit=2"
+    CACHE_TTL = 3600  # 1 heure
+
+    def __init__(self):
+        self.logger    = logging.getLogger("FearGreed")
+        self._cache    = {}
+        self._cache_ts = 0.0
+
+    def get(self) -> dict:
+        now = time.time()
+        if now - self._cache_ts < self.CACHE_TTL and self._cache:
+            return self._cache
+        try:
+            r = requests.get(self.URL, timeout=8,
+                             headers={"User-Agent": "RouteBot/4.1"})
+            r.raise_for_status()
+            data  = r.json()["data"][0]
+            value = int(data["value"])
+            label = data["value_classification"]
+            prev  = int(r.json()["data"][1]["value"]) if len(r.json()["data"]) > 1 else value
+            result = {
+                "value":         value,
+                "label":         label,
+                "prev":          prev,
+                "delta":         value - prev,
+                "zone":          ("extreme_fear" if value < 25 else
+                                  "fear"         if value < 45 else
+                                  "neutral"      if value < 55 else
+                                  "greed"        if value < 75 else "extreme_greed"),
+                "timestamp":     datetime.now(timezone.utc).isoformat(),
+            }
+            self._cache    = result
+            self._cache_ts = now
+            self.logger.info(f"Fear & Greed : {value} — {label} (prev {prev})")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Fear & Greed: {e}")
+            return self._cache or {
+                "value": 50, "label": "Neutral", "prev": 50, "delta": 0,
+                "zone": "neutral", "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+
+# =============================================================================
+# [MODULE 4f] YahooFinanceClient — Données gratuites Yahoo Finance
+# =============================================================================
+
+class YahooFinanceClient:
+    """
+    Données gratuites Yahoo Finance sans clé API :
+      - Earnings dates → blackout ±3j avant/après publication
+      - Analyst target price → upside potentiel
+      - Short ratio → potentiel short squeeze
+      - 52w high/low → niveau breakout
+      - Revenue growth → qualité fondamentale
+      - Pre-market price → direction anticipée
+      - Trending tickers US → enrichit la rotation watchlist
+      - News headlines → sentiment additionnel
+    Cache adaptatif : 24h earnings, 1h fundamentaux, 30min trending.
+    """
+
+    BASE     = "https://query1.finance.yahoo.com"
+    HEADERS  = {"User-Agent": "Mozilla/5.0 (compatible; RouteBot/4.1)"}
+
+    def __init__(self):
+        self.logger     = logging.getLogger("Yahoo")
+        self._earn      = {}     # ticker → liste de dates
+        self._earn_ts   = {}
+        self._fund      = {}     # ticker → dict fondamentaux
+        self._fund_ts   = {}
+        self._trend     = []
+        self._trend_ts  = 0.0
+
+    # ── Earnings dates ──────────────────────────────────────────────────────
+    def get_earnings_dates(self, ticker: str) -> list:
+        now = time.time()
+        if ticker in self._earn and now - self._earn_ts.get(ticker, 0) < 86400:
+            return self._earn[ticker]
+        try:
+            url = f"{self.BASE}/v10/finance/quoteSummary/{ticker}?modules=calendarEvents"
+            r   = requests.get(url, headers=self.HEADERS, timeout=8)
+            r.raise_for_status()
+            res   = r.json().get("quoteSummary", {}).get("result", [{}])
+            cal   = (res[0] if res else {}).get("calendarEvents", {})
+            dates = []
+            for ed in cal.get("earnings", {}).get("earningsDate", []):
+                raw = ed.get("raw")
+                if raw:
+                    dates.append(datetime.fromtimestamp(raw, tz=timezone.utc).isoformat())
+            self._earn[ticker]    = dates
+            self._earn_ts[ticker] = now
+            return dates
+        except Exception as e:
+            self.logger.debug(f"Yahoo earnings {ticker}: {e}")
+            return self._earn.get(ticker, [])
+
+    def est_blackout_earnings(self, ticker: str, jours: int = 3) -> bool:
+        """True si une publication de résultats est prévue dans ±jours jours."""
+        if "/" in ticker:
+            return False  # Crypto n'a pas d'earnings
+        now = datetime.now(timezone.utc)
+        for d_str in self.get_earnings_dates(ticker):
+            try:
+                d = datetime.fromisoformat(d_str.replace("Z", "+00:00"))
+                if d.tzinfo is None:
+                    d = d.replace(tzinfo=timezone.utc)
+                if abs((d - now).total_seconds()) / 86400 <= jours:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    # ── Fondamentaux ────────────────────────────────────────────────────────
+    def get_fondamentaux(self, ticker: str) -> dict:
+        """Retourne target_price, short_ratio, 52w_high, revenue_growth, pre_market, analyst_rating."""
+        now = time.time()
+        if ticker in self._fund and now - self._fund_ts.get(ticker, 0) < 3600:
+            return self._fund[ticker]
+        if "/" in ticker:
+            return {}  # Pas de fondamentaux pour crypto
+        try:
+            modules = "summaryDetail,financialData,defaultKeyStatistics,price"
+            url = f"{self.BASE}/v10/finance/quoteSummary/{ticker}?modules={modules}"
+            r   = requests.get(url, headers=self.HEADERS, timeout=10)
+            r.raise_for_status()
+            res  = r.json().get("quoteSummary", {}).get("result", [{}])
+            data = res[0] if res else {}
+
+            def v(d, k):
+                x = d.get(k, {})
+                return x.get("raw") if isinstance(x, dict) else x
+
+            sd  = data.get("summaryDetail", {})
+            fd  = data.get("financialData", {})
+            ks  = data.get("defaultKeyStatistics", {})
+            pr  = data.get("price", {})
+
+            target        = v(fd, "targetMeanPrice")
+            current       = v(pr, "regularMarketPrice")
+            upside        = round((target - current) / current * 100, 1) if target and current and current > 0 else None
+            analyst_key   = fd.get("recommendationKey", "")
+
+            result = {
+                "target_price":      target,
+                "current_price":     current,
+                "upside_pct":        upside,
+                "analyst_rating":    analyst_key,
+                "revenue_growth":    v(fd, "revenueGrowth"),
+                "short_ratio":       v(ks, "shortRatio"),
+                "short_pct_float":   v(ks, "shortPercentOfFloat"),
+                "week52_high":       v(sd, "fiftyTwoWeekHigh"),
+                "week52_low":        v(sd, "fiftyTwoWeekLow"),
+                "pe_ratio":          v(sd, "trailingPE"),
+                "pre_market_price":  v(pr, "preMarketPrice"),
+                "pre_market_change": v(pr, "preMarketChangePercent"),
+                "squeeze_potential": bool(v(ks, "shortRatio") and (v(ks, "shortRatio") or 0) > 8),
+            }
+            self._fund[ticker]    = result
+            self._fund_ts[ticker] = now
+            return result
+        except Exception as e:
+            self.logger.debug(f"Yahoo fondamentaux {ticker}: {e}")
+            return self._fund.get(ticker, {})
+
+    # ── Trending tickers US ─────────────────────────────────────────────────
+    def get_trending(self) -> list:
+        """Retourne les tickers US en tendance sur Yahoo Finance (cache 30min)."""
+        now = time.time()
+        if now - self._trend_ts < 1800 and self._trend:
+            return self._trend
+        try:
+            url = f"{self.BASE}/v1/finance/trending/US?count=20"
+            r   = requests.get(url, headers=self.HEADERS, timeout=8)
+            r.raise_for_status()
+            quotes = r.json().get("finance", {}).get("result", [{}])[0].get("quotes", [])
+            self._trend    = [q["symbol"] for q in quotes if "symbol" in q]
+            self._trend_ts = now
+            self.logger.info(f"Yahoo trending : {self._trend[:5]}...")
+            return self._trend
+        except Exception as e:
+            self.logger.debug(f"Yahoo trending: {e}")
+            return self._trend
+
+    # ── News headlines sentiment ────────────────────────────────────────────
+    def get_news_sentiment(self, ticker: str) -> float:
+        """Score 0.0-1.0 basé sur les titres des dernières news Yahoo Finance."""
+        try:
+            url = f"{self.BASE}/v1/finance/search?q={ticker}&newsCount=8&quotesCount=0"
+            r   = requests.get(url, headers=self.HEADERS, timeout=8)
+            r.raise_for_status()
+            news = r.json().get("news", [])
+            if not news:
+                return 0.5
+            texte = " ".join(n.get("title", "") for n in news).upper()
+            pos = sum(texte.count(m) for m in
+                      ["BEAT", "SURGE", "RALLY", "BUY", "UPGRADE", "BULL", "GROWTH", "RECORD", "GAIN"])
+            neg = sum(texte.count(m) for m in
+                      ["MISS", "CRASH", "SELL", "DOWNGRADE", "BEAR", "LOSS", "DECLINE", "CUT", "WARN"])
+            total = pos + neg
+            return round(pos / total, 2) if total > 0 else 0.5
+        except Exception:
+            return 0.5
+
+
+# =============================================================================
+# [MODULE 4c-bis] StrategieSachaPro — Traduction Python du Pine Script TradingView
+# =============================================================================
+
+class StrategieSachaPro:
+    """
+    Traduction Python de « Sacha Pro – Multi-TF Strategy v3 » (TradingView Pine Script v5).
+
+    ARCHITECTURE :
+      • Mode LONG TERME uniquement  → barres DAILY (défaut recommandé)
+        Signal : EMA9 croise EMA21 + prix > EMA50 + RSI non surachat + volume ✓
+      • Mode COURT TERME désactivé → BB + Stoch + VWAP sur barres intraday
+        (documenté mais désactivé : performance inférieure selon backtests utilisateur)
+
+    INTÉGRATION dans le bot :
+      • N'écrase PAS le score existant (HMA/MACD/RSI/BB/ADX)
+      • Agit comme couche de CONFIRMATION multiplicative :
+          BUY confirmé  → score_tech × 1.12   (+12%)
+          SELL confirmé → score_tech × 0.85   (−15% → réduit la confiance achat)
+          NEUTRE        → pas de modification
+      • Résultat stocké dans base["sacha_pro"] pour le dashboard
+
+    PARAMÈTRES (fidèles au Pine Script) :
+      EMA rapide  = 9   | EMA lente   = 21   | EMA tendance = 50
+      RSI surachat = 65 | RSI survente = 35
+      SL = 2%           | TP = 4%
+      Volume filtre : > 1.2× SMA20 des volumes
+    """
+
+    # ── EMA (tendance) ────────────────────────────────────────────────────────
+    EMA_FAST  = 9
+    EMA_SLOW  = 21
+    EMA_TREND = 50
+
+    # ── RSI (long terme) ──────────────────────────────────────────────────────
+    RSI_LEN   = 14
+    RSI_OB    = 65   # surachat → bloque les achats
+    RSI_OS    = 35   # survente → bloque les ventes
+
+    # ── BB / Stoch (court terme — documenté, désactivé) ──────────────────────
+    BB_LEN    = 20
+    BB_MULT   = 2.0
+    STOCH_K   = 14
+    STOCH_D   = 3
+    STOCH_OB  = 80
+    STOCH_OS  = 20
+
+    # ── Gestion du risque ─────────────────────────────────────────────────────
+    SL_PCT    = 2.0   # Stop-Loss 2%  (référence, appliqué par GestionnaireRisque)
+    TP_PCT    = 4.0   # Take-Profit 4% (ratio 1:2)
+    VOL_MULT  = 1.2   # Volume min = 1.2× SMA20
+
+    # ── Boost/malus appliqué au score technique existant ─────────────────────
+    BOOST_BUY  = 1.12   # signal BUY confirmé  → × 1.12
+    BOOST_SELL = 0.85   # signal SELL confirmé → × 0.85 (réduit confiance achat)
+
+    def _calcul_rsi(self, close: "pd.Series") -> "pd.Series":
+        """RSI Wilder (identique à TradingView ta.rsi)."""
+        delta    = close.diff()
+        gain     = delta.clip(lower=0)
+        loss     = (-delta).clip(lower=0)
+        avg_gain = gain.ewm(com=self.RSI_LEN - 1, adjust=False, min_periods=self.RSI_LEN).mean()
+        avg_loss = loss.ewm(com=self.RSI_LEN - 1, adjust=False, min_periods=self.RSI_LEN).mean()
+        rs       = avg_gain / avg_loss.replace(0, 1e-10)
+        return 100 - 100 / (1 + rs)
+
+    def analyser(self, ticker: str, df: pd.DataFrame) -> dict:
+        """
+        Analyse les barres DAILY d'un ticker.
+        Retourne un dict avec signal, détails et niveaux SL/TP de référence.
+        """
+        result = {
+            "signal":         "NEUTRAL",
+            "sl_pct":         self.SL_PCT,
+            "tp_pct":         self.TP_PCT,
+            "ema_fast":       None,
+            "ema_slow":       None,
+            "ema_trend":      None,
+            "rsi":            None,
+            "ema_crossover":  False,   # EMA9 vient de croiser EMA21 à la hausse
+            "ema_crossunder": False,   # EMA9 vient de croiser EMA21 à la baisse
+            "vol_ok":         False,
+            "prix":           None,
+            "details":        "Données insuffisantes",
+            "boost_applique": 1.0,
+        }
+
+        if df is None or df.empty or len(df) < self.EMA_TREND + 5:
+            return result
+
+        try:
+            close  = df["close"].astype(float)
+            volume = df["volume"].astype(float)
+
+            # ── EMA (identique Pine Script ta.ema) ───────────────────────────
+            ema_f = close.ewm(span=self.EMA_FAST,  adjust=False).mean()
+            ema_s = close.ewm(span=self.EMA_SLOW,  adjust=False).mean()
+            ema_t = close.ewm(span=self.EMA_TREND, adjust=False).mean()
+
+            # ── RSI Wilder ────────────────────────────────────────────────────
+            rsi = self._calcul_rsi(close)
+
+            # ── Volume : volume > SMA20(volume) × VOL_MULT ────────────────────
+            vol_ma = volume.rolling(20).mean()
+            vol_ok = bool(len(volume) >= 20 and
+                          volume.iloc[-1] > vol_ma.iloc[-1] * self.VOL_MULT)
+
+            # ── Valeurs courantes et précédentes ──────────────────────────────
+            f_now,  f_prev  = float(ema_f.iloc[-1]),  float(ema_f.iloc[-2])
+            s_now,  s_prev  = float(ema_s.iloc[-1]),  float(ema_s.iloc[-2])
+            t_now           = float(ema_t.iloc[-1])
+            rsi_now         = float(rsi.iloc[-1])
+            prix            = float(close.iloc[-1])
+
+            # ── Croisements (ta.crossover / ta.crossunder en Pine Script) ─────
+            # crossover  = bar précédente f < s  ET  bar actuelle f > s
+            ema_crossover  = (f_prev <= s_prev) and (f_now > s_now)
+            # crossunder = bar précédente f > s  ET  bar actuelle f < s
+            ema_crossunder = (f_prev >= s_prev) and (f_now < s_now)
+
+            # ── Signaux LONG TERME (Pine Script lt_buy / lt_sell) ─────────────
+            #   lt_buy  = crossover(EMA9, EMA21) AND prix > EMA50 AND RSI < RSI_OB AND vol_ok
+            #   lt_sell = crossunder(EMA9, EMA21) AND prix < EMA50 AND RSI > RSI_OS AND vol_ok
+            lt_buy  = ema_crossover  and prix > t_now and rsi_now < self.RSI_OB and vol_ok
+            lt_sell = ema_crossunder and prix < t_now and rsi_now > self.RSI_OS and vol_ok
+
+            # Note : même sans croisement AUJOURD'HUI, on signale la tendance
+            # en cours (utile pour le dashboard)
+            tendance_haussiere = f_now > s_now and prix > t_now and rsi_now < self.RSI_OB
+            tendance_baissiere = f_now < s_now and prix < t_now and rsi_now > self.RSI_OS
+
+            signal = "BUY" if lt_buy else ("SELL" if lt_sell else "NEUTRAL")
+            boost  = (self.BOOST_BUY  if signal == "BUY"  else
+                      self.BOOST_SELL if signal == "SELL" else 1.0)
+
+            details = (
+                f"EMA{self.EMA_FAST}={f_now:.2f} "
+                f"{'>' if f_now > s_now else '<'} "
+                f"EMA{self.EMA_SLOW}={s_now:.2f} | "
+                f"EMA{self.EMA_TREND}={t_now:.2f} | "
+                f"RSI={rsi_now:.1f} | "
+                f"Vol={'✓' if vol_ok else '✗'} | "
+                f"{'🔺 Crossover !' if ema_crossover else '🔻 Crossunder !' if ema_crossunder else ('↗ Tendance haussière' if tendance_haussiere else '↘ Tendance baissière' if tendance_baissiere else '↔ Neutre')}"
+            )
+
+            result.update({
+                "signal":         signal,
+                "ema_fast":       round(f_now,  4),
+                "ema_slow":       round(s_now,  4),
+                "ema_trend":      round(t_now,  4),
+                "rsi":            round(rsi_now, 2),
+                "ema_crossover":  ema_crossover,
+                "ema_crossunder": ema_crossunder,
+                "vol_ok":         vol_ok,
+                "prix":           round(prix, 4),
+                "details":        details,
+                "boost_applique": boost,
+                "tendance_haussiere": tendance_haussiere,
+                "tendance_baissiere": tendance_baissiere,
+            })
+
+        except Exception as e:
+            result["details"] = f"Erreur calcul: {e}"
+
+        return result
+
+
+# =============================================================================
+# [MODULE 4d] PortefeuilleLongTerme — Mini-portefeuille Sacha Pro (expérimental)
+# =============================================================================
+
+class PortefeuilleLongTerme:
+    """
+    Gère un mini-portefeuille long terme basé EXCLUSIVEMENT sur les signaux
+    de StrategieSachaPro (crossovers EMA daily).
+
+    PRINCIPE :
+      • Budget séparé et limité (LT_ALLOC_PCT % de l'equity, max LT_MAX_USD)
+      • Les positions LT ne peuvent PAS être vendues par le bot court-terme
+      • Seul un crossunder EMA daily déclenche la vente
+      • Stockage persistant dans data/portefeuille_lt.json (survit aux redémarrages)
+
+    CYCLE DE VIE D'UNE POSITION LT :
+      1. Sacha Pro détecte EMA9 crossover EMA21 (daily) + conditions remplies
+      2. PortefeuilleLongTerme.ouvrir_position() → achat Alpaca + sauvegarde JSON
+      3. Chaque cycle : vérifier si EMA9 crossunder EMA21 → vendre si oui
+      4. Protection : _analyser_actif() ignore VENTE sur tickers LT
+
+    STATUS EXPÉRIMENTAL : allocation volontairement petite, max 3 positions.
+    """
+
+    DATA_PATH = Path("data/portefeuille_lt.json")
+
+    def __init__(self):
+        self.logger    = logging.getLogger("PortefeuilleLT")
+        self.positions: dict = {}   # {ticker: {entry_price, notional, entry_date, sacha_details}}
+        self._charger()
+
+    # ── Persistance ───────────────────────────────────────────────────────────
+    def _charger(self):
+        """Charge les positions depuis le fichier JSON."""
+        try:
+            if self.DATA_PATH.exists():
+                data = json.loads(self.DATA_PATH.read_text(encoding="utf-8"))
+                self.positions = data.get("positions", {})
+                self.logger.info(
+                    f"📂 Portefeuille LT chargé : {len(self.positions)} position(s) "
+                    f"— {list(self.positions.keys())}"
+                )
+        except Exception as e:
+            self.logger.warning(f"Chargement portefeuille LT: {e}")
+            self.positions = {}
+
+    def sauvegarder(self):
+        """Persiste les positions dans data/portefeuille_lt.json."""
+        try:
+            self.DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "positions": self.positions,
+                "nb_positions": len(self.positions),
+                "derniere_maj": datetime.now(timezone.utc).isoformat(),
+                "mode": "experimental",
+            }
+            self.DATA_PATH.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
+        except Exception as e:
+            self.logger.error(f"Sauvegarde portefeuille LT: {e}")
+
+    # ── Gestion des positions ─────────────────────────────────────────────────
+    def est_position_lt(self, ticker: str) -> bool:
+        """Retourne True si ce ticker est actuellement une position long terme."""
+        return ticker in self.positions or ticker.replace("/", "") in self.positions
+
+    def nb_positions(self) -> int:
+        return len(self.positions)
+
+    def ouvrir_position(self, ticker: str, prix: float, notional: float,
+                        sacha_details: dict = None) -> bool:
+        """Enregistre l'ouverture d'une position LT."""
+        try:
+            self.positions[ticker] = {
+                "entry_price":   prix,
+                "notional":      notional,
+                "entry_date":    datetime.now(timezone.utc).isoformat(),
+                "sacha_details": sacha_details or {},
+                "status":        "open",
+                "highest_price": prix,   # pour trailing reference
+            }
+            self.sauvegarder()
+            self.logger.info(
+                f"📈 [LT] Position ouverte : {ticker} | "
+                f"${notional:.0f} @ ${prix:.2f}"
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f"Ouverture position LT {ticker}: {e}")
+            return False
+
+    def fermer_position(self, ticker: str, prix_sortie: float = None,
+                        raison: str = "EMA crossunder") -> dict:
+        """Enregistre la fermeture et retourne les stats de la trade."""
+        pos = self.positions.pop(ticker, self.positions.pop(ticker.replace("/", ""), None))
+        self.sauvegarder()
+        if pos and prix_sortie:
+            pnl_pct = (prix_sortie - pos["entry_price"]) / pos["entry_price"] * 100
+            self.logger.info(
+                f"📉 [LT] Position fermée : {ticker} | "
+                f"PnL: {pnl_pct:+.2f}% | Raison: {raison}"
+            )
+            return {"ticker": ticker, "pnl_pct": round(pnl_pct, 2), "raison": raison}
+        return {"ticker": ticker, "pnl_pct": None, "raison": raison}
+
+    def get_resume(self) -> dict:
+        """Retourne un résumé JSON-sérialisable pour le dashboard."""
+        return {
+            "positions":      self.positions,
+            "nb_positions":   len(self.positions),
+            "tickers":        list(self.positions.keys()),
+            "mode":           "experimental",
+            "config": {
+                "alloc_pct":     LT_ALLOC_PCT,
+                "max_positions": LT_MAX_POSITIONS,
+                "max_usd":       LT_MAX_USD,
+            }
         }
 
 
@@ -1686,7 +2247,8 @@ class ScoreDecisionIA:
     POIDS_SENT = 0.40
 
     def decider(self, analyse_tech: dict, analyse_sent: dict,
-                dans_position: bool) -> dict:
+                dans_position: bool, fear_greed: int = 50,
+                fondamentaux: dict = None) -> dict:
 
         score_tech   = analyse_tech.get("score",          50)
         signal_tech  = analyse_tech.get("signal",         "HOLD")
@@ -1702,6 +2264,44 @@ class ScoreDecisionIA:
             score_tech * self.POIDS_TECH + score_sent * 100 * self.POIDS_SENT, 1
         )
         score_fusionne = max(0, min(100, score_fusionne))
+
+        # ── Fear & Greed adjustment ───────────────────────────────────────────
+        fg_bonus = ""
+        if fear_greed < 25:   # Peur extrême → acheter la panique = boost léger
+            score_fusionne = min(100, score_fusionne * 1.06)
+            fg_bonus = " | F&G:PeurExtrême+6%"
+        elif fear_greed > 75:  # Euphorie → prudence = pénalité légère
+            score_fusionne = max(0, score_fusionne * 0.94)
+            fg_bonus = " | F&G:Euphorie-6%"
+
+        # ── Fundamentals Yahoo adjustment ─────────────────────────────────────
+        fund_bonus = ""
+        if fondamentaux:
+            upside = fondamentaux.get("upside_pct") or 0
+            if upside > 20 and not dans_position:
+                score_fusionne = min(100, score_fusionne * 1.04)
+                fund_bonus += f" | Analystes+{upside:.0f}%"
+            elif upside < -10:
+                score_fusionne = max(0, score_fusionne * 0.96)
+            if fondamentaux.get("squeeze_potential") and not dans_position:
+                score_fusionne = min(100, score_fusionne * 1.03)
+                fund_bonus += " | ShortSqueeze"
+            # Pre-market signal
+            pm_chg = fondamentaux.get("pre_market_change") or 0
+            if isinstance(pm_chg, float):
+                if pm_chg > 0.02 and signal_tech == "BUY":
+                    score_fusionne = min(100, score_fusionne * 1.03)
+                    fund_bonus += f" | PreMkt+{pm_chg*100:.1f}%"
+                elif pm_chg < -0.02 and not dans_position:
+                    score_fusionne = max(0, score_fusionne * 0.97)
+            # Analyst rating
+            ar = fondamentaux.get("analyst_rating", "")
+            if ar in ("strong_buy", "buy") and not dans_position:
+                score_fusionne = min(100, score_fusionne * 1.02)
+            elif ar in ("strong_sell", "sell") and not dans_position:
+                score_fusionne = max(0, score_fusionne * 0.98)
+
+        score_fusionne = round(max(0, min(100, score_fusionne)), 1)
 
         action     = "AUCUNE"
         conviction = "FAIBLE"
@@ -1721,7 +2321,8 @@ class ScoreDecisionIA:
                     f"Score fusionné {score_fusionne:.0f}/100 "
                     f"(tech={score_tech:.0f} sent={score_sent:.2f} "
                     f"biais={biais_sent}"
-                    f"{' | HMA crossover ✓' if croisement else ''})"
+                    f"{' | HMA crossover ✓' if croisement else ''}"
+                    f"{fg_bonus}{fund_bonus})"
                 )
 
             elif signal_tech == "BUY" and score_sent < SEUIL_SENTIMENT_BUY:
@@ -1771,6 +2372,13 @@ class BotRoute:
         self.shadow      = ShadowPortfolio()
         self.reddit      = VeilleReddit()
         self.regime_det  = DetecteurRegime()
+        self.fear_greed      = FearGreedIndex()
+        self.yahoo           = YahooFinanceClient()
+        self.strategie_sacha = StrategieSachaPro()
+        self.portefeuille_lt = PortefeuilleLongTerme() if LT_ACTIF else None
+        self._fear_greed_value: int  = 50
+        self._mins_depuis_open: float = 999.0
+        self._mins_avant_close: float = 999.0
         self.df_qqq: pd.DataFrame = pd.DataFrame()
         self.persistance = GestionnairePersistance()
         self.logger      = logging.getLogger("BotRoute")
@@ -2258,6 +2866,16 @@ class BotRoute:
         if len(candidats) < MAX_A:
             candidats += SP500_CANDIDATS[:MAX_A - len(candidats)]
 
+        # Priorité aux tickers trending Yahoo Finance
+        trending_yahoo = []
+        try:
+            trending_yahoo = [t for t in self.yahoo.get_trending()
+                              if t not in ACTIFS_TOUS and t in SP500_CANDIDATS][:5]
+        except Exception:
+            pass
+        if trending_yahoo:
+            candidats = trending_yahoo + [c for c in candidats if c not in trending_yahoo]
+
         self.logger.info(f"🔄 Rotation watchlist — analyse {len(candidats)} candidats")
         tops = []
         for ticker in candidats:
@@ -2574,6 +3192,10 @@ class BotRoute:
             "rsi": None, "atr_pct": None, "indicateurs": {},
             "momentum_spy": 0.0,
             "raison": "",
+            "earnings_blackout": False,
+            "fondamentaux": {},
+            "sacha_pro": {"signal": "NEUTRAL", "details": "Non calculé"},
+            "position_lt": False,   # True si ce ticker est tenu par le portefeuille LT
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -2603,6 +3225,48 @@ class BotRoute:
         if ticker != "SPY" and not self.df_spy.empty:
             mom = self.momentum.score_vs_spy(ticker, df, self.df_spy)
             base["momentum_spy"] = mom
+
+        # ── 2c. Fondamentaux Yahoo Finance ─────────────────────────────────
+        fondamentaux = {}
+        try:
+            fondamentaux = self.yahoo.get_fondamentaux(ticker)
+            # News sentiment Yahoo (léger)
+            news_sent = self.yahoo.get_news_sentiment(ticker)
+            fondamentaux["news_sentiment"] = news_sent
+        except Exception:
+            pass
+        base["fondamentaux"] = fondamentaux
+
+        # ── 2d. Sacha Pro Strategy (daily bars — long terme) ───────────────
+        # Traduction Python du Pine Script «Sacha Pro – Multi-TF Strategy v3»
+        # Agit comme couche de CONFIRMATION : ajuste score_tech avant decider()
+        try:
+            df_daily = self.alpaca.get_barres_daily(ticker)
+            sacha = self.strategie_sacha.analyser(ticker, df_daily)
+            base["sacha_pro"] = sacha
+
+            if sacha["signal"] == "BUY":
+                # EMA9 croise EMA21 à la hausse sur daily + prix > EMA50 + RSI < 65
+                tech["score"] = min(100.0, tech["score"] * StrategieSachaPro.BOOST_BUY)
+                self.logger.info(
+                    f"[SACHA PRO] {ticker} BUY daily "
+                    f"{'🔺 CROSSOVER' if sacha['ema_crossover'] else '↗ tendance'} "
+                    f"→ score_tech × {StrategieSachaPro.BOOST_BUY} "
+                    f"= {tech['score']:.1f} | {sacha['details']}"
+                )
+            elif sacha["signal"] == "SELL":
+                # EMA9 croise EMA21 à la baisse sur daily + prix < EMA50 + RSI > 35
+                tech["score"] = max(0.0, tech["score"] * StrategieSachaPro.BOOST_SELL)
+                self.logger.info(
+                    f"[SACHA PRO] {ticker} SELL daily "
+                    f"{'🔻 CROSSUNDER' if sacha['ema_crossunder'] else '↘ tendance'} "
+                    f"→ score_tech × {StrategieSachaPro.BOOST_SELL} "
+                    f"= {tech['score']:.1f} | {sacha['details']}"
+                )
+            # Mise à jour score_technique dans base pour le dashboard
+            base["score_technique"] = tech["score"]
+        except Exception as e:
+            self.logger.debug(f"Sacha Pro {ticker}: {e}")
 
         # ── 3. Sentiment Groq — uniquement si signal fort ou position ouverte
         sent = {"score": 0.55, "resume": "Non analysé",
@@ -2646,7 +3310,9 @@ class BotRoute:
         base["facteurs_negatifs"]  = sent.get("facteurs_negatifs", [])
 
         # ── 4. Décision fusionnée ─────────────────────────────────────────
-        dec = self.decision.decider(tech, sent, dans_position)
+        dec = self.decision.decider(tech, sent, dans_position,
+                                    fear_greed=self._fear_greed_value,
+                                    fondamentaux=fondamentaux)
         base.update({
             "score_fusionne": dec["score_fusionne"],
             "conviction":     dec["conviction"],
@@ -2677,6 +3343,15 @@ class BotRoute:
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
             elif self._portfolio_heat >= MAX_HEAT_PCT:
                 base["raison"] = f"Portfolio heat {self._portfolio_heat:.1f}% ≥ {MAX_HEAT_PCT:.0f}% — achat bloqué"
+            # Q6: Filtre horaire — évite première et dernière 30min du marché
+            elif self._mins_depuis_open < 30:
+                base["raison"] = f"Filtre horaire — {self._mins_depuis_open:.0f}min depuis ouverture (< 30min)"
+            elif self._mins_avant_close < 30:
+                base["raison"] = f"Filtre horaire — {self._mins_avant_close:.0f}min avant clôture (< 30min)"
+            # Q7: Earnings Blackout
+            elif self.yahoo.est_blackout_earnings(ticker):
+                base["raison"] = "📅 EARNINGS BLACKOUT — résultats ±3j"
+                base["earnings_blackout"] = True
             else:
                 montant = self.risque.allocation(
                     dec["conviction"], tech["indicateurs"].get("atr_pct"),
@@ -2715,6 +3390,18 @@ class BotRoute:
                         base["raison"] = f"Erreur ordre : {e}"
 
         elif dec["action"] == "VENTE" and dans_position:
+            # ── Protection portefeuille long terme ────────────────────────────
+            # Si ce ticker est tenu par le portefeuille LT, le bot CT ne peut pas vendre.
+            # Seul _gerer_portefeuille_lt() peut déclencher la vente (crossunder daily).
+            if (self.portefeuille_lt is not None and
+                    self.portefeuille_lt.est_position_lt(ticker)):
+                base["position_lt"] = True
+                base["raison"] = "🔒 Position long terme Sacha Pro — vente CT bloquée"
+                sacha_lt = base.get("sacha_pro", {})
+                base["raison"] += f" | {sacha_lt.get('details', '')}"
+                self.logger.info(f"[LT] {ticker} — vente CT bloquée (position LT protégée)")
+                return base
+
             # Récupère la position avec normalisation du symbole
             pos = positions.get(ticker) or positions.get(ticker_norm, {})
             if self.alpaca.liquider_position(ticker):
@@ -2742,12 +3429,177 @@ class BotRoute:
 
         return base
 
+    # =========================================================================
+    # Portefeuille Long Terme — géré par Sacha Pro Strategy (expérimental)
+    # =========================================================================
+    def _gerer_portefeuille_lt(self, positions: dict, compte: dict,
+                               executer: bool = True) -> list:
+        """
+        Gère le mini-portefeuille long terme Sacha Pro.
+        Appelé UNE FOIS par cycle, après la boucle principale (_analyser_actif).
+
+        Logique :
+          • Pour chaque ticker dans ACTIFS_ACTIONS (pas crypto — trop volatile LT)
+          • Récupère les barres daily → analyse Sacha Pro
+          • BUY  : crossover EMA9/EMA21 + conditions + place libre + capital OK → achat
+          • SELL : crossunder EMA9/EMA21 → vente (même marché fermé : on prépare)
+          • Protège contre double achat (ticker déjà en position CT)
+
+        Retourne la liste des actions LT exécutées (pour dashboard + logs).
+        """
+        if self.portefeuille_lt is None or not LT_ACTIF:
+            return []
+
+        lt_actions = []
+        equity = float(compte.get("equity", 10000))
+        ticker_norm_map = {t.replace("/", ""): t for t in ACTIFS_ACTIONS}
+
+        for ticker in ACTIFS_ACTIONS:
+            try:
+                ticker_norm = ticker.replace("/", "")
+                en_position_lt = self.portefeuille_lt.est_position_lt(ticker)
+                en_position_ct = ticker in positions or ticker_norm in positions
+
+                # Récupère barres daily (déjà en cache depuis _analyser_actif)
+                df_daily = self.alpaca.get_barres_daily(ticker)
+                sacha = self.strategie_sacha.analyser(ticker, df_daily)
+
+                # ── VENTE LT : crossunder sur daily ─────────────────────────
+                if en_position_lt and sacha["ema_crossunder"]:
+                    prix_actuel = sacha.get("prix") or 0.0
+                    stats = self.portefeuille_lt.fermer_position(
+                        ticker, prix_actuel, "EMA crossunder daily"
+                    )
+                    if executer:
+                        self.alpaca.liquider_position(ticker)
+                    lt_actions.append({
+                        "action": "VENTE_LT",
+                        "ticker": ticker,
+                        "prix":   prix_actuel,
+                        "pnl_pct": stats.get("pnl_pct"),
+                        "raison": "🔻 EMA9 crossunder EMA21 (daily) — Sacha Pro SELL",
+                        "executer": executer,
+                    })
+                    self.discord._envoyer(
+                        f"📉 **[LT] VENTE** `{ticker}` — EMA crossunder daily | "
+                        f"PnL: {stats.get('pnl_pct', '?'):+}% | "
+                        f"{'Exécuté' if executer else 'Simulé (marché fermé)'}"
+                    )
+                    self.logger.info(
+                        f"[LT VENTE] {ticker} | crossunder daily | "
+                        f"PnL: {stats.get('pnl_pct', '?'):+}% | "
+                        f"{'exécuté' if executer else 'simulé'}"
+                    )
+                    continue
+
+                # ── ACHAT LT : crossover sur daily ──────────────────────────
+                # Conditions :
+                #  1. Signal BUY Sacha Pro (crossover obligatoire si LT_REQUIRE_CROSSOVER)
+                #  2. Pas encore en position LT pour ce ticker
+                #  3. Pas en position CT pour ce ticker (évite de doubler l'exposition)
+                #  4. Nombre max de positions LT non atteint
+                #  5. Marché ouvert (ou simulé si fermé)
+                signal_ok = (sacha["ema_crossover"] if LT_REQUIRE_CROSSOVER
+                             else sacha["signal"] == "BUY")
+
+                if (signal_ok and
+                        not en_position_lt and
+                        not en_position_ct and
+                        self.portefeuille_lt.nb_positions() < LT_MAX_POSITIONS and
+                        not self.pause_drawdown):
+
+                    montant = max(
+                        LT_MIN_USD,
+                        min(LT_MAX_USD, equity * LT_ALLOC_PCT / 100)
+                    )
+
+                    if not self.risque.capital_suffisant(compte, montant):
+                        lt_actions.append({
+                            "action": "ACHAT_LT_BLOQUE",
+                            "ticker": ticker,
+                            "raison": f"Capital insuffisant pour LT (besoin ${montant:.0f})",
+                        })
+                        continue
+
+                    prix_actuel = sacha.get("prix") or 0.0
+                    achat_ok = False
+
+                    if executer:
+                        try:
+                            self.alpaca.soumettre_ordre(ticker, montant, "buy")
+                            achat_ok = True
+                        except Exception as e:
+                            lt_actions.append({
+                                "action": "ACHAT_LT_ERREUR",
+                                "ticker": ticker,
+                                "erreur": str(e),
+                            })
+                            continue
+                    else:
+                        # Marché fermé : enregistre quand même la position (price de demain)
+                        achat_ok = True
+
+                    if achat_ok:
+                        self.portefeuille_lt.ouvrir_position(
+                            ticker, prix_actuel, montant, sacha
+                        )
+                        lt_actions.append({
+                            "action":   "ACHAT_LT",
+                            "ticker":   ticker,
+                            "montant":  montant,
+                            "prix":     prix_actuel,
+                            "raison":   "🔺 EMA9 crossover EMA21 (daily) — Sacha Pro BUY",
+                            "details":  sacha.get("details", ""),
+                            "executer": executer,
+                        })
+                        self.discord._envoyer(
+                            f"📈 **[LT] ACHAT** `{ticker}` — EMA crossover daily | "
+                            f"${montant:.0f} | RSI={sacha.get('rsi','?')} | "
+                            f"{'Exécuté' if executer else 'Simulé (marché fermé)'}\n"
+                            f"> {sacha.get('details','')}"
+                        )
+                        self.logger.info(
+                            f"[LT ACHAT] {ticker} | crossover daily | "
+                            f"${montant:.0f} @ ${prix_actuel:.2f} | "
+                            f"RSI={sacha.get('rsi','?')} | "
+                            f"{'exécuté' if executer else 'simulé'}"
+                        )
+
+            except Exception as e:
+                self.logger.debug(f"[LT] {ticker} erreur: {e}")
+
+        return lt_actions
+
     def run_cycle(self) -> dict:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
         self._achats_ce_cycle = 0   # reset compteur achats par cycle
         marche_ouvert = self.alpaca.marche_ouvert()
+
+        # ── Fear & Greed (cache 1h) ─────────────────────────────────────────
+        fg = self.fear_greed.get()
+        self._fear_greed_value = fg.get("value", 50)
+
+        # ── Calcul timing marché ────────────────────────────────────────────
+        try:
+            if marche_ouvert:
+                clock = self.alpaca.api.get_clock()
+                next_close = clock.next_close
+                if hasattr(next_close, 'tzinfo') and next_close.tzinfo is None:
+                    next_close = next_close.replace(tzinfo=timezone.utc)
+                else:
+                    next_close = next_close.astimezone(timezone.utc)
+                market_open_today = next_close - timedelta(hours=6, minutes=30)
+                now_utc = datetime.now(timezone.utc)
+                self._mins_depuis_open  = max(0, (now_utc - market_open_today).total_seconds() / 60)
+                self._mins_avant_close  = max(0, (next_close - now_utc).total_seconds() / 60)
+            else:
+                self._mins_depuis_open  = 999.0
+                self._mins_avant_close  = 999.0
+        except Exception:
+            self._mins_depuis_open  = 999.0
+            self._mins_avant_close  = 999.0
         if marche_ouvert:
             self.logger.info("🟢 Marché OUVERT — mode trading actif")
         else:
@@ -2808,6 +3660,19 @@ class BotRoute:
             d = self._analyser_actif(ticker, positions, compte,
                                      executer=executer, kelly_base=kelly_base)
             decisions.append(d)
+
+        # ── Portefeuille Long Terme — Sacha Pro (expérimental) ───────────────
+        lt_actions = []
+        if LT_ACTIF and self.portefeuille_lt is not None:
+            try:
+                lt_actions = self._gerer_portefeuille_lt(positions, compte, executer)
+                if lt_actions:
+                    self.logger.info(
+                        f"[LT] {len(lt_actions)} action(s) LT ce cycle : "
+                        f"{[a['action'] + '/' + a['ticker'] for a in lt_actions]}"
+                    )
+            except Exception as e:
+                self.logger.error(f"Erreur gestion LT: {e}")
 
         # ── Shadow Portfolio — simulation sans capital réel ───────────────────
         for d in decisions:
@@ -2958,6 +3823,11 @@ class BotRoute:
                 "base_usd":    kelly_base or ALLOCATION_BASE,
                 "standard_usd": ALLOCATION_BASE,
             },
+            "fear_greed":     fg,
+            "yahoo_trending": self.yahoo.get_trending()[:10],
+            "portefeuille_lt": (self.portefeuille_lt.get_resume()
+                                if self.portefeuille_lt else {"nb_positions": 0, "positions": {}}),
+            "lt_actions_cycle": lt_actions,
             "metriques": metriques,
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
@@ -2970,6 +3840,9 @@ class BotRoute:
                 "nb_candidats_sp500": len(SP500_CANDIDATS),
                 "indicateurs":        list(POIDS.keys()),
                 "sentiment_modele":   AnalyseurSentimentGroq.MODELE,
+                "lt_actif":           LT_ACTIF,
+                "lt_alloc_pct":       LT_ALLOC_PCT,
+                "lt_max_positions":   LT_MAX_POSITIONS,
             },
         }
 

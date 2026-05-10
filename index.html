@@ -23,6 +23,13 @@
 -->
 <head>
   <meta charset="UTF-8"/>
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00e5ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ROUTE/v4">
+  <link rel="apple-touch-icon" href="icon.svg">
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>ROUTE/v4 — Cyberpunk Trading Console</title>
 
@@ -442,6 +449,43 @@
     .regime-LATERAL,.regime-LATÉRAL{background:rgba(255,200,0,0.12);border:1px solid #ffc800;color:#ffc800}
     .regime-INDÉTERMINÉ,.regime-INDETERMINE,.regime-INDETERMINÉ{background:rgba(100,120,140,0.12);border:1px solid var(--dim);color:var(--dim)}
     .regime-desc{font:400 12px 'JetBrains Mono',monospace;color:var(--dim);margin-top:4px}
+
+    /* ── Fear & Greed ─────────────────────────────────────────────────────── */
+    .fg-gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0}
+    .fg-arc{width:160px;height:80px;position:relative;overflow:visible}
+    .fg-value{font:800 36px 'Rajdhani',sans-serif;color:var(--cyn);line-height:1}
+    .fg-label{font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px}
+    .fg-delta{font:500 11px 'JetBrains Mono',monospace}
+    .fg-zones{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+    .fg-zone{font:600 10px 'JetBrains Mono',monospace;padding:2px 8px;border-radius:10px;opacity:0.6}
+    .fg-zone.active{opacity:1;box-shadow:0 0 8px currentColor}
+    .fg-ef{background:rgba(255,45,120,0.2);color:var(--mag);border:1px solid var(--mag)}
+    .fg-f{background:rgba(255,150,0,0.2);color:#ff9600;border:1px solid #ff9600}
+    .fg-n{background:rgba(100,120,140,0.2);color:var(--dim);border:1px solid var(--dim)}
+    .fg-g{background:rgba(0,200,80,0.2);color:var(--grn);border:1px solid var(--grn)}
+    .fg-eg{background:rgba(0,255,136,0.2);color:var(--acid);border:1px solid var(--acid)}
+    /* ── Earnings badge ─────────────────────────────────────────────────────── */
+    .earn-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:8px;font:600 10px 'JetBrains Mono',monospace;background:rgba(255,200,0,0.15);border:1px solid #ffc800;color:#ffc800}
+    /* ── Yahoo trending chips ─────────────────────────────────────────────── */
+    .yahoo-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font:600 11px 'JetBrains Mono',monospace;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.3);color:var(--cyn);cursor:default}
+    .yahoo-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+    /* ── Pre-market badge ─────────────────────────────────────────────────── */
+    .pm-up{color:var(--grn);font:600 10px 'JetBrains Mono',monospace}
+    .pm-dn{color:var(--mag);font:600 10px 'JetBrains Mono',monospace}
+
+    /* ── Sacha Pro Strategy ───────────────────────────────────────────────── */
+    .sp-signal{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:10px;font:700 12px 'JetBrains Mono',monospace;letter-spacing:.5px}
+    .sp-buy{background:rgba(0,255,136,0.15);border:1px solid var(--grn);color:var(--grn)}
+    .sp-sell{background:rgba(255,80,80,0.15);border:1px solid #ff5050;color:#ff5050}
+    .sp-neutral{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:var(--dim)}
+    .sp-cross{display:inline-flex;align-items:center;gap:4px;font:600 10px 'JetBrains Mono',monospace;padding:2px 8px;border-radius:6px;background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.3);color:var(--cyn)}
+    .sp-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);font:500 11px 'JetBrains Mono',monospace;color:var(--dim)}
+    .sp-row:last-child{border-bottom:none}
+    .sp-val{color:var(--fg);font-weight:700}
+    .sp-up{color:var(--grn)}
+    .sp-dn{color:#ff5050}
+    .sp-ticker-row{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.03);margin-bottom:4px}
+    .sp-list{display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto}
 
     /* ── Reddit Veille ──────────────────────────────────────── */
     .reddit-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -1047,6 +1091,36 @@
           </div>
         </div>
 
+        <!-- Fear & Greed + Yahoo Trending -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">😱</span> FEAR &amp; GREED</span>
+            <span class="phd-r" id="fg-label-badge" style="font-size:11px;color:var(--dim)">—</span>
+          </div>
+          <div class="card-body">
+            <div class="fg-gauge-wrap">
+              <svg class="fg-arc" viewBox="0 0 160 80" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
+                <path id="fg-arc-fill" d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="var(--cyn)" stroke-width="12" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
+                <text x="80" y="72" text-anchor="middle" font-family="Rajdhani" font-size="28" font-weight="800" fill="var(--cyn)" id="fg-value-svg">—</text>
+              </svg>
+              <div class="fg-label" id="fg-label-txt">—</div>
+              <div class="fg-delta" id="fg-delta-txt" style="color:var(--dim)">—</div>
+            </div>
+            <div class="fg-zones">
+              <span class="fg-zone fg-ef" id="fg-ef">Peur Extrême</span>
+              <span class="fg-zone fg-f"  id="fg-f">Peur</span>
+              <span class="fg-zone fg-n"  id="fg-n">Neutre</span>
+              <span class="fg-zone fg-g"  id="fg-g">Avidité</span>
+              <span class="fg-zone fg-eg" id="fg-eg">Avidité Extrême</span>
+            </div>
+            <div style="margin-top:14px">
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">YAHOO TRENDING 🔥</div>
+              <div id="yahoo-trending" class="yahoo-chips"><span style="color:var(--dim);font-size:11px">—</span></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Stress Test -->
         <div class="card">
           <div class="phd">
@@ -1156,6 +1230,82 @@
                   <label>taille standard</label>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Earnings Blackout Calendar -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">📅</span> EARNINGS &amp; FONDAMENTAUX</span>
+          </div>
+          <div class="card-body">
+            <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:8px">BLACKOUT ACTIFS</div>
+            <div id="earnings-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:20px">
+              <span style="color:var(--dim);font-size:11px">Aucun blackout détecté</span>
+            </div>
+            <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin:14px 0 8px">TOP ANALYSTES</div>
+            <div id="analyst-list" style="display:flex;flex-direction:column;gap:6px">
+              <span style="color:var(--dim);font-size:11px">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Portefeuille Long Terme — Sacha Pro -->
+        <div class="card" id="card-lt">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">🏦</span> PORTEFEUILLE LONG TERME</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span id="lt-badge-exp" style="font:600 9px 'JetBrains Mono',monospace;padding:2px 7px;border-radius:6px;background:rgba(255,200,0,0.15);border:1px solid rgba(255,200,0,0.4);color:#ffc800;letter-spacing:.5px">⚗️ EXPÉRIMENTAL</span>
+              <span id="lt-nb-pos" style="font:700 11px 'JetBrains Mono',monospace;color:var(--cyn)">0/3</span>
+            </span>
+          </div>
+          <div class="card-body">
+            <div style="font:500 10px 'JetBrains Mono',monospace;color:var(--dim);margin-bottom:10px;line-height:1.6">
+              Petit budget séparé • Géré par <span style="color:var(--cyn)">Sacha Pro EMA daily</span><br>
+              Achat sur crossover EMA9↗EMA21 • Vente sur EMA9↘EMA21 • Bot CT ne peut pas vendre
+            </div>
+            <div id="lt-positions-list" class="sp-list">
+              <span style="color:var(--dim);font-size:11px">Aucune position LT ouverte</span>
+            </div>
+            <div id="lt-actions" style="margin-top:10px;display:none">
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">ACTIONS CE CYCLE</div>
+              <div id="lt-actions-list" style="display:flex;flex-direction:column;gap:4px"></div>
+            </div>
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:12px;font:500 10px 'JetBrains Mono',monospace;color:var(--dim)">
+              <span>Alloc: <span id="lt-alloc-pct" class="sp-val">5</span>% / position</span>
+              <span>Max: <span id="lt-max-pos" class="sp-val">3</span> pos</span>
+              <span>Max: <span id="lt-max-usd" class="sp-val">800</span>$</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sacha Pro Strategy — TradingView Pine Script traduit en Python -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">⚡</span> SACHA PRO STRATEGY</span>
+            <span style="font:600 10px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px">DAILY · LONG TERME</span>
+          </div>
+          <div class="card-body">
+            <!-- Signal global + croisement -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div id="sp-signal-global" class="sp-signal sp-neutral">⚡ NEUTRAL</div>
+              <div id="sp-cross-badge" style="display:none" class="sp-cross">🔺 EMA CROSSOVER</div>
+            </div>
+            <!-- Description -->
+            <div id="sp-details" style="font:500 10px 'JetBrains Mono',monospace;color:var(--dim);margin-bottom:12px;line-height:1.6">
+              En attente des données…
+            </div>
+            <!-- Titre liste -->
+            <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:8px">SIGNAUX PAR ACTIF</div>
+            <!-- Liste des tickers avec signal Sacha Pro -->
+            <div id="sp-list" class="sp-list">
+              <span style="color:var(--dim);font-size:11px">—</span>
+            </div>
+            <!-- Légende -->
+            <div style="margin-top:12px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);font:500 10px 'JetBrains Mono',monospace;color:var(--dim)">
+              📈 BUY : EMA9 ↗ EMA21 + prix &gt; EMA50 + RSI &lt; 65 &nbsp;|&nbsp;
+              📉 SELL : EMA9 ↘ EMA21 + prix &lt; EMA50 + RSI &gt; 35
             </div>
           </div>
         </div>
@@ -1388,6 +1538,11 @@ function render(data) {
   renderReddit(data.veille_reddit);
   renderStress(data.stress_test);
   renderProtection(data.circuit_breaker, data.portfolio_heat, data.kelly);
+  renderFearGreed(data.fear_greed);
+  renderYahooTrending(data.yahoo_trending);
+  renderEarnings(data.decisions_cycle);
+  renderSachaPro(data.decisions_cycle);
+  renderPortefeuilleLT(data.portefeuille_lt, data.lt_actions_cycle, data.config);
 
   $('footer').innerHTML =
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
@@ -2277,6 +2432,252 @@ function renderProtection(cb, heat, kelly) {
     setTxt('kelly-base', fU(kelly.base_usd   ?? 0));
     setTxt('kelly-std',  fU(kelly.standard_usd ?? 0));
   }
+}
+
+/* ── Fear & Greed Gauge ───────────────────────────────────── */
+function renderFearGreed(fg) {
+  if (!fg) return;
+  const v = fg.value ?? 50;
+  const z = fg.zone ?? 'neutral';
+  const d = fg.delta ?? 0;
+
+  // Arc SVG — 220 = longueur totale du demi-cercle (PI * r avec r=70)
+  const offset = 220 - (v / 100 * 220);
+  const arcEl  = document.getElementById('fg-arc-fill');
+  const valEl  = document.getElementById('fg-value-svg');
+  const lblEl  = document.getElementById('fg-label-txt');
+  const dltEl  = document.getElementById('fg-delta-txt');
+  const badEl  = document.getElementById('fg-label-badge');
+
+  const colors = {
+    extreme_fear:'#ff2d78', fear:'#ff9600',
+    neutral:'#8899aa',      greed:'#00c850', extreme_greed:'#00ff88'
+  };
+  const color = colors[z] || '#8899aa';
+
+  if (arcEl) { arcEl.style.strokeDashoffset = offset; arcEl.style.stroke = color; }
+  if (valEl) { valEl.textContent = v; valEl.style.fill = color; }
+  if (lblEl) { lblEl.textContent = fg.label ?? '—'; lblEl.style.color = color; }
+  if (dltEl) {
+    dltEl.textContent = d !== 0 ? `${d > 0 ? '+' : ''}${d} vs hier` : 'stable vs hier';
+    dltEl.style.color = d > 0 ? 'var(--grn)' : d < 0 ? 'var(--mag)' : 'var(--dim)';
+  }
+  if (badEl) { badEl.textContent = fg.label ?? '—'; badEl.style.color = color; }
+
+  // Zones active
+  const zoneMap = {extreme_fear:'fg-ef', fear:'fg-f', neutral:'fg-n', greed:'fg-g', extreme_greed:'fg-eg'};
+  Object.values(zoneMap).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const activeId = zoneMap[z];
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) el.classList.add('active');
+  }
+}
+
+/* ── Yahoo Trending ─────────────────────────────────────── */
+function renderYahooTrending(tickers) {
+  const cont = document.getElementById('yahoo-trending');
+  if (!cont) return;
+  const list = tickers ?? [];
+  cont.innerHTML = list.length
+    ? list.map(t => `<span class="yahoo-chip">🔥 ${t}</span>`).join('')
+    : '<span style="color:var(--dim);font-size:11px">—</span>';
+}
+
+/* ── Portefeuille Long Terme ─────────────────────────────── */
+function renderPortefeuilleLT(pltData, ltActions, cfg) {
+  const listEl    = document.getElementById('lt-positions-list');
+  const actionsEl = document.getElementById('lt-actions');
+  const acListEl  = document.getElementById('lt-actions-list');
+  const nbEl      = document.getElementById('lt-nb-pos');
+  const allocEl   = document.getElementById('lt-alloc-pct');
+  const maxEl     = document.getElementById('lt-max-pos');
+  const maxUsdEl  = document.getElementById('lt-max-usd');
+  if (!listEl) return;
+
+  const plt   = pltData   || {};
+  const pos   = plt.positions || {};
+  const nb    = plt.nb_positions || 0;
+  const maxP  = plt.config?.max_positions ?? (cfg?.lt_max_positions ?? 3);
+  const alPct = plt.config?.alloc_pct     ?? (cfg?.lt_alloc_pct ?? 5);
+  const maxU  = plt.config?.max_usd       ?? 800;
+
+  if (nbEl)     nbEl.textContent     = `${nb}/${maxP}`;
+  if (allocEl)  allocEl.textContent  = alPct;
+  if (maxEl)    maxEl.textContent    = maxP;
+  if (maxUsdEl) maxUsdEl.textContent = maxU;
+
+  // ── Liste des positions ouvertes ──
+  const tickers = Object.keys(pos);
+  if (!tickers.length) {
+    listEl.innerHTML = '<span style="color:var(--dim);font-size:11px">Aucune position LT ouverte</span>';
+  } else {
+    listEl.innerHTML = tickers.map(ticker => {
+      const p = pos[ticker];
+      const entryDate = p.entry_date ? new Date(p.entry_date).toLocaleDateString('fr-FR') : '—';
+      const entryPx   = p.entry_price?.toFixed(2) ?? '—';
+      const notional  = p.notional?.toFixed(0)    ?? '—';
+      const rsi       = p.sacha_details?.rsi       ?? '—';
+      return `
+        <div class="sp-ticker-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+            <span style="font:700 12px 'JetBrains Mono',monospace;color:var(--cyn)">${ticker}</span>
+            <span class="sp-signal sp-buy" style="font-size:10px;padding:2px 8px">🏦 LT HOLD</span>
+          </div>
+          <div style="font:500 10px 'JetBrains Mono',monospace;color:var(--dim)">
+            Entrée: <span class="sp-val">${entryDate}</span> @ <span class="sp-val">$${entryPx}</span>
+            &nbsp;|&nbsp; Notional: <span class="sp-val">$${notional}</span>
+            &nbsp;|&nbsp; RSI entrée: <span class="sp-val">${rsi}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Actions du cycle ──
+  const acts = ltActions ?? [];
+  const realActs = acts.filter(a => ['ACHAT_LT','VENTE_LT'].includes(a.action));
+  if (actionsEl && acListEl) {
+    if (realActs.length) {
+      actionsEl.style.display = 'block';
+      acListEl.innerHTML = realActs.map(a => {
+        const isAchat = a.action === 'ACHAT_LT';
+        const cls     = isAchat ? 'sp-up' : 'sp-dn';
+        const ico     = isAchat ? '📈' : '📉';
+        const detail  = isAchat
+          ? `$${a.montant?.toFixed(0)} @ $${a.prix?.toFixed(2)}`
+          : `PnL: ${a.pnl_pct != null ? (a.pnl_pct > 0 ? '+' : '') + a.pnl_pct + '%' : '?'}`;
+        return `
+          <div style="display:flex;align-items:center;gap:8px;font:500 10px 'JetBrains Mono',monospace">
+            <span class="sp-val ${cls}">${ico} ${a.action.replace('_LT','')}</span>
+            <span style="color:var(--cyn)">${a.ticker}</span>
+            <span style="color:var(--dim)">${detail}</span>
+            <span style="color:var(--dim);font-size:9px">${a.executer ? '✓ exécuté' : '⏸ simulé'}</span>
+          </div>`;
+      }).join('');
+    } else {
+      actionsEl.style.display = 'none';
+    }
+  }
+}
+
+/* ── Sacha Pro Strategy ──────────────────────────────────── */
+function renderSachaPro(decisions) {
+  const signalEl = document.getElementById('sp-signal-global');
+  const crossEl  = document.getElementById('sp-cross-badge');
+  const detailEl = document.getElementById('sp-details');
+  const listEl   = document.getElementById('sp-list');
+  if (!signalEl || !listEl) return;
+
+  const decs = (decisions ?? []).filter(d => d.sacha_pro && d.sacha_pro.signal !== undefined);
+  if (!decs.length) return;
+
+  // Signal dominant : on prend le premier BUY crossover, sinon le premier BUY, sinon NEUTRAL
+  const crossovers = decs.filter(d => d.sacha_pro.ema_crossover);
+  const buys       = decs.filter(d => d.sacha_pro.signal === 'BUY');
+  const sells      = decs.filter(d => d.sacha_pro.signal === 'SELL');
+  const dominant   = crossovers[0] || buys[0] || null;
+  const domSignal  = dominant ? dominant.sacha_pro.signal : (sells.length > buys.length ? 'SELL' : 'NEUTRAL');
+
+  // Badge signal global
+  signalEl.className = 'sp-signal ' + (domSignal === 'BUY' ? 'sp-buy' : domSignal === 'SELL' ? 'sp-sell' : 'sp-neutral');
+  signalEl.innerHTML = domSignal === 'BUY'  ? '📈 BUY'
+                     : domSignal === 'SELL' ? '📉 SELL'
+                     : '⚡ NEUTRAL';
+
+  // Badge croisement
+  if (crossovers.length > 0) {
+    crossEl.style.display = 'inline-flex';
+    crossEl.textContent = `🔺 CROSSOVER · ${crossovers.map(d => d.ticker).join(', ')}`;
+  } else {
+    const unders = decs.filter(d => d.sacha_pro.ema_crossunder);
+    if (unders.length > 0) {
+      crossEl.style.display = 'inline-flex';
+      crossEl.className = 'sp-cross';
+      crossEl.style.background = 'rgba(255,80,80,0.12)';
+      crossEl.style.borderColor = 'rgba(255,80,80,0.3)';
+      crossEl.style.color = '#ff5050';
+      crossEl.textContent = `🔻 CROSSUNDER · ${unders.map(d => d.ticker).join(', ')}`;
+    } else {
+      crossEl.style.display = 'none';
+    }
+  }
+
+  // Détail du dominant
+  if (dominant) {
+    const sp = dominant.sacha_pro;
+    detailEl.innerHTML = `<span style="color:var(--cyn)">${dominant.ticker}</span> — ${sp.details || '—'}`;
+  } else {
+    detailEl.textContent = `${buys.length} BUY · ${sells.length} SELL · ${decs.length - buys.length - sells.length} Neutral parmi ${decs.length} actifs analysés`;
+  }
+
+  // Liste tous les actifs
+  listEl.innerHTML = decs.map(d => {
+    const sp  = d.sacha_pro;
+    const sig = sp.signal ?? 'NEUTRAL';
+    const cls = sig === 'BUY' ? 'sp-up' : sig === 'SELL' ? 'sp-dn' : '';
+    const ico = sig === 'BUY' ? '📈' : sig === 'SELL' ? '📉' : '—';
+    const rsi = sp.rsi != null ? `RSI <span class="sp-val">${sp.rsi}</span>` : '';
+    const ema = sp.ema_fast != null
+      ? `EMA9 <span class="sp-val">${sp.ema_fast?.toFixed(2)}</span>`
+      : '';
+    const cross = sp.ema_crossover ? '<span class="sp-cross" style="padding:1px 5px;font-size:9px">🔺 X</span>'
+                : sp.ema_crossunder ? '<span class="sp-cross" style="padding:1px 5px;font-size:9px;background:rgba(255,80,80,.1);border-color:rgba(255,80,80,.3);color:#ff5050">🔻 X</span>'
+                : '';
+    return `
+      <div class="sp-ticker-row">
+        <span style="font:700 11px 'JetBrains Mono',monospace;color:var(--cyn)">${d.ticker}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${rsi} ${ema} ${cross}
+          <span class="sp-val ${cls}" style="font-size:11px">${ico} ${sig}</span>
+        </span>
+      </div>`;
+  }).join('');
+}
+
+/* ── Earnings Blackout + Fondamentaux ─────────────────────── */
+function renderEarnings(decisions) {
+  const earnEl   = document.getElementById('earnings-list');
+  const analEl   = document.getElementById('analyst-list');
+  if (!earnEl || !analEl) return;
+  const decs = decisions ?? [];
+
+  // Earnings blackout
+  const blackouts = decs.filter(d => d.earnings_blackout);
+  earnEl.innerHTML = blackouts.length
+    ? blackouts.map(d => `<span class="earn-badge">📅 ${d.ticker}</span>`).join('')
+    : '<span style="color:var(--grn);font-size:11px">✓ Aucun blackout</span>';
+
+  // Top analystes par upside
+  const withTarget = decs
+    .filter(d => d.fondamentaux?.upside_pct != null)
+    .sort((a, b) => (b.fondamentaux.upside_pct ?? 0) - (a.fondamentaux.upside_pct ?? 0))
+    .slice(0, 5);
+
+  analEl.innerHTML = withTarget.length
+    ? withTarget.map(d => {
+        const up  = d.fondamentaux.upside_pct ?? 0;
+        const ar  = d.fondamentaux.analyst_rating ?? '';
+        const col = up > 15 ? 'var(--grn)' : up < -5 ? 'var(--mag)' : 'var(--dim)';
+        const sg  = up >= 0 ? '+' : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+          <span style="font:600 12px 'JetBrains Mono',monospace;color:var(--text)">${d.ticker}</span>
+          <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim)">${ar}</span>
+          <span style="font:700 12px 'JetBrains Mono',monospace;color:${col}">${sg}${up?.toFixed(1)}%</span>
+        </div>`;
+      }).join('')
+    : '<span style="color:var(--dim);font-size:11px">—</span>';
+}
+</script>
+
+<script>
+/* ── Service Worker (PWA) ─────────────────────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
 }
 </script>
 </body>
