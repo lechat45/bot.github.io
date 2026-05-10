@@ -902,6 +902,7 @@
       <span class="pill" id="pill-status">● Init…</span>
       <span class="pill pause" id="pill-pause" style="display:none">⏸ DRAWDOWN</span>
       <span id="crypto-nuit-badge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.3);color:#00e5ff;font:600 10px 'JetBrains Mono',monospace">₿ CRYPTO 24/7</span>
+      <span id="mode-temporel-badge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font:600 10px 'JetBrains Mono',monospace">⚡ OUVERTURE</span>
       <div id="bot-health" style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3)">
         <span id="health-dot" style="width:8px;height:8px;border-radius:50%;background:var(--grn);box-shadow:0 0 8px var(--grn);animation:pulse-grn 2s infinite"></span>
         <span id="health-label" style="font:600 10px 'JetBrains Mono',monospace;color:var(--grn);letter-spacing:1px">BOT ACTIF</span>
@@ -1106,6 +1107,18 @@
     </div>
   </div>
 
+  <!-- Section ETF & Protection -->
+  <div id="etf-section" style="display:none;margin-top:10px">
+    <div class="pnl">
+      <div class="phd" style="flex-wrap:wrap;gap:10px">
+        <span class="phd-t">📊 ETF &amp; PROTECTION</span>
+        <span style="font:400 10px 'JetBrains Mono',monospace;color:var(--t2)">Diversification sectorielle + Or</span>
+        <span class="phd-r" id="etf-count">0 ETF</span>
+      </div>
+      <div id="etf-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;padding:10px"></div>
+    </div>
+  </div>
+
       <!-- ─── LIVE : Scanner Signaux + Régime/Reddit + Stress Test ─── -->
       <section class="two-col" style="margin-top:20px">
 
@@ -1133,6 +1146,7 @@
           <div class="card-body">
             <div id="regime-badge" class="regime-badge regime-INDÉTERMINÉ">◈ INDÉTERMINÉ</div>
             <div id="regime-desc" class="regime-desc">—</div>
+            <div id="regime-explication" style="font:400 12px 'Rajdhani',sans-serif;color:rgba(255,255,255,0.6);margin-top:2px"></div>
             <div style="margin-top:14px;margin-bottom:6px;font:600 11px 'JetBrains Mono',sans-serif;color:var(--dim);letter-spacing:1px">REDDIT BUZZ</div>
             <div id="reddit-chips" class="reddit-chips"></div>
             <div id="reddit-meta" style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim);margin-top:6px">—</div>
@@ -1283,6 +1297,21 @@
           </div>
         </div>
 
+      </section>
+
+      <!-- ─── PERFORMANCE : Résumé hebdomadaire ─── -->
+      <section style="margin-top:20px">
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">📅</span> RÉSUMÉ HEBDOMADAIRE</span>
+            <span class="phd-r" id="weekly-meta" style="font-size:11px;color:var(--dim)">7 derniers jours</span>
+          </div>
+          <div class="card-body">
+            <div id="weekly-summary">
+              <span style="color:var(--dim);font:400 11px 'JetBrains Mono',monospace">Chargement…</span>
+            </div>
+          </div>
+        </div>
       </section>
 
   </div><!-- /tab-performance -->
@@ -1442,6 +1471,11 @@ async function load() {
     .then(r => r.ok ? r.json() : null)
     .then(mc => { if (mc) renderMonteCarlo(mc); })
     .catch(() => {});
+  // Charger historique trades (résumé hebdomadaire)
+  fetch('data/historique_trades.json?_=' + Date.now())
+    .then(r => r.json())
+    .then(trades => renderWeeklySummary(trades))
+    .catch(() => { renderWeeklySummary(null); });
 }
 
 function setStatus(ok, pause) {
@@ -1648,6 +1682,8 @@ function render(data) {
   renderEarnings(data.decisions_cycle);
   renderSachaPro(data.decisions_cycle);
   renderPortefeuilleLT(data.portefeuille_lt, data.lt_actions_cycle, data.config);
+  renderEtfSection(data.decisions_cycle);
+  renderModeTemporel(data.meta);
 
   $('footer').innerHTML =
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
@@ -1747,6 +1783,16 @@ function renderPositions(positions) {
     const bw   = Math.min(Math.abs(plpc)/5*100, 100);
     const bc   = plpc>=0?'var(--acid)':'var(--red)';
     const dir  = plpc>=0?'▲':'▼';
+    // PnL simple label
+    const pnlLabel = plpc > 0
+      ? `<span style="font:600 10px 'JetBrains Mono',monospace;color:var(--grn)">✅ En gain</span>`
+      : plpc < 0
+      ? `<span style="font:600 10px 'JetBrains Mono',monospace;color:var(--red)">⚠️ En perte</span>`
+      : '';
+    // Progress bar vers take-profit (+4.5%)
+    const tpTarget = 4.5;
+    const tpPct   = plpc >= 0 ? Math.min(100, (plpc / tpTarget) * 100) : 0;
+    const tpBar   = `<div style="height:3px;background:var(--raised);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${tpPct.toFixed(1)}%;background:var(--grn);border-radius:2px;transition:width .6s"></div></div>`;
     return `<tr>
       <td class="sym">${esc(p.ticker)}</td>
       <td class="neu">${(p.qty??0).toFixed(4)}</td>
@@ -1757,7 +1803,7 @@ function renderPositions(positions) {
       <td><div class="bar-wrap">
         <div class="bar"><div class="bar-mid"></div><div class="bar-fill" style="width:${bw}%;background:${bc}"></div></div>
         <span class="${cp(plpc)}">${fP(plpc)}</span>
-      </div></td>
+      </div>${pnlLabel}${tpBar}</td>
     </tr>`;
   }).join('');
 }
@@ -2116,6 +2162,7 @@ function renderAssets(decs, positions) {
         <span style="font:600 9px 'JetBrains Mono',monospace;color:${fCol}">FUS ${fus.toFixed(0)}/100</span>
       </div>
     ${raison?`<div class="areason"><span class="lab">RAISON</span> <em style="font-style:italic;color:var(--t2)">${esc(raison)}</em></div>`:''}
+    ${d.raison_simple?`<div style="font:500 13px 'Rajdhani',sans-serif;color:#e0e8ff;margin-top:4px;line-height:1.4;padding:4px 6px;background:rgba(224,232,255,0.05);border-radius:3px;border-left:2px solid rgba(224,232,255,0.18)">${esc(d.raison_simple)}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -2435,12 +2482,22 @@ function renderRegime(regime) {
   if (!regime) return;
   const badge = $('regime-badge');
   const desc  = $('regime-desc');
+  const expl  = $('regime-explication');
   const r     = (regime.regime ?? 'INDÉTERMINÉ').replace(/É/g,'E').replace(/Â/g,'A').replace(/È/g,'E').replace(/Ê/g,'E');
   if (badge) {
     badge.className   = `regime-badge regime-${r}`;
     badge.textContent = `◈ ${regime.regime ?? 'INDÉTERMINÉ'}`;
   }
   if (desc) desc.textContent = regime.description ?? '—';
+  if (expl) {
+    const explTexts = {
+      HAUSSIER:    '📈 Le marché monte — le bot investit normalement',
+      BAISSIER:    '📉 Le marché baisse — le bot réduit les achats et sécurise les positions',
+      LATERAL:     '↔️ Marché stable — le bot cherche des opportunités précises',
+      INDETERMINE: '',
+    };
+    expl.textContent = explTexts[r] ?? '';
+  }
 }
 
 /* ── Reddit Veille ───────────────────────────────────────────── */
@@ -2774,6 +2831,123 @@ function renderSachaPro(decisions) {
           <span class="sp-val ${cls}" style="font-size:11px">${ico} ${sig}</span>
         </span>
       </div>`;
+  }).join('');
+}
+
+/* ── Résumé hebdomadaire ─────────────────────────────────── */
+function renderWeeklySummary(trades) {
+  const cont = document.getElementById('weekly-summary');
+  if (!cont) return;
+  if (!trades || !Array.isArray(trades)) {
+    cont.innerHTML = '<span style="color:var(--dim);font:400 11px \'JetBrains Mono\',monospace">Résumé hebdomadaire bientôt disponible</span>';
+    return;
+  }
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const recent = trades.filter(t => {
+    const ts = t.timestamp ? new Date(t.timestamp).getTime() : 0;
+    return ts > now - week && t.type !== 'ACHAT' && t.pnl != null;
+  });
+  if (!recent.length) {
+    cont.innerHTML = '<span style="color:var(--dim);font:400 11px \'JetBrains Mono\',monospace">Aucun trade cette semaine</span>';
+    return;
+  }
+  const totalPnl   = recent.reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const bestTrade  = recent.reduce((best, t) => (t.pnl ?? 0) > (best.pnl ?? -Infinity) ? t : best, recent[0]);
+  const worstTrade = recent.reduce((worst, t) => (t.pnl ?? 0) < (worst.pnl ?? Infinity) ? t : worst, recent[0]);
+  const pnlCol     = totalPnl >= 0 ? 'var(--grn)' : 'var(--red)';
+  const bestCol    = (bestTrade.pnl ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)';
+  const worstCol   = (worstTrade.pnl ?? 0) >= 0 ? 'var(--grn)' : 'var(--red)';
+  cont.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+        <div style="font:400 9px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Trades cette semaine</div>
+        <div style="font:700 20px 'Rajdhani',sans-serif;color:var(--cyn)">${recent.length}</div>
+      </div>
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+        <div style="font:400 9px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">PnL semaine</div>
+        <div style="font:700 20px 'Rajdhani',sans-serif;color:${pnlCol}">${totalPnl >= 0 ? '+' : ''}${fU(totalPnl)}</div>
+      </div>
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+        <div style="font:400 9px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Meilleur trade</div>
+        <div style="font:700 16px 'Rajdhani',sans-serif;color:${bestCol}">${bestTrade.ticker ?? '—'} ${bestTrade.pnl >= 0 ? '+' : ''}${fU(bestTrade.pnl ?? 0)}</div>
+      </div>
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+        <div style="font:400 9px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Pire trade</div>
+        <div style="font:700 16px 'Rajdhani',sans-serif;color:${worstCol}">${worstTrade.ticker ?? '—'} ${worstTrade.pnl >= 0 ? '+' : ''}${fU(worstTrade.pnl ?? 0)}</div>
+      </div>
+    </div>`;
+}
+
+/* ── Mode temporel badge ─────────────────────────────────── */
+function renderModeTemporel(meta) {
+  const badge = document.getElementById('mode-temporel-badge');
+  if (!badge) return;
+  const mode = meta?.mode_temporel;
+  if (mode) {
+    const configs = {
+      OUVERTURE: { txt: '⚡ OUVERTURE', bg: 'rgba(255,149,0,0.15)', border: 'rgba(255,149,0,0.4)', color: '#ff9500' },
+      NORMAL:    { txt: '✅ MARCHÉ ACTIF', bg: 'rgba(0,255,136,0.12)', border: 'rgba(0,255,136,0.35)', color: 'var(--grn)' },
+      CLOTURE:   { txt: '🔔 CLÔTURE', bg: 'rgba(181,109,255,0.12)', border: 'rgba(181,109,255,0.35)', color: 'var(--vio)' },
+      FERME:     { txt: '🌙 HORS HEURES', bg: 'rgba(90,112,144,0.15)', border: 'rgba(90,112,144,0.3)', color: 'var(--t2)' }
+    };
+    const cfg = configs[mode] || configs.FERME;
+    badge.style.display = 'inline-flex';
+    badge.style.background = cfg.bg;
+    badge.style.borderColor = cfg.border;
+    badge.style.border = `1px solid ${cfg.border}`;
+    badge.style.color = cfg.color;
+    badge.textContent = cfg.txt;
+  } else {
+    // Fallback : se baser sur marche_ouvert
+    const open = meta?.marche_ouvert;
+    if (open === true) {
+      badge.style.display = 'inline-flex';
+      badge.style.background = 'rgba(0,255,136,0.12)';
+      badge.style.border = '1px solid rgba(0,255,136,0.35)';
+      badge.style.color = 'var(--grn)';
+      badge.textContent = '✅ MARCHÉ ACTIF';
+    } else if (open === false) {
+      badge.style.display = 'inline-flex';
+      badge.style.background = 'rgba(90,112,144,0.15)';
+      badge.style.border = '1px solid rgba(90,112,144,0.3)';
+      badge.style.color = 'var(--t2)';
+      badge.textContent = '🌙 HORS HEURES';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+/* ── ETF Sectoriels ──────────────────────────────────────── */
+const ETF_LIST = ["XLK","XLV","XLE","XLF","GLD","SPY","QQQ","IWM"];
+function renderEtfSection(decs) {
+  const section = document.getElementById('etf-section');
+  const grid    = document.getElementById('etf-grid');
+  const count   = document.getElementById('etf-count');
+  if (!section || !grid) return;
+
+  const etfDecs = (decs ?? []).filter(d => ETF_LIST.includes(d.ticker));
+  const active  = etfDecs.filter(d => d.signal_technique === 'BUY' || d.signal_technique === 'SELL');
+  section.style.display = active.length ? '' : 'none';
+  if (!active.length) return;
+
+  if (count) count.textContent = `${etfDecs.length} ETF`;
+  grid.innerHTML = etfDecs.map(d => {
+    const sig   = d.signal_technique ?? 'HOLD';
+    const score = d.score_fusionne ?? d.score_technique ?? 50;
+    const prix  = d.prix ?? 0;
+    const sCol  = sig === 'BUY' ? 'var(--grn)' : sig === 'SELL' ? 'var(--red)' : 'var(--t2)';
+    const sigTxt= sig === 'BUY' ? '▲ BUY' : sig === 'SELL' ? '▼ SELL' : '● HOLD';
+    const bdrCol= sig === 'BUY' ? 'rgba(0,200,255,0.25)' : sig === 'SELL' ? 'rgba(255,56,96,0.25)' : 'rgba(0,200,255,0.10)';
+    return `<div style="background:rgba(0,200,255,0.05);border:1px solid ${bdrCol};border-radius:6px;padding:8px 10px">
+      <div style="font:700 13px 'JetBrains Mono',monospace;color:var(--cyn);letter-spacing:1px;margin-bottom:4px">${esc(d.ticker)}</div>
+      <div style="font:400 10px 'JetBrains Mono',monospace;color:var(--t2);margin-bottom:6px">${fU(prix)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+        <span style="font:700 11px 'JetBrains Mono',monospace;color:${sCol}">${sigTxt}</span>
+        <span style="font:600 10px 'JetBrains Mono',monospace;color:${sCol}">${score.toFixed(0)}</span>
+      </div>
+    </div>`;
   }).join('');
 }
 

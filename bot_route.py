@@ -113,9 +113,10 @@ HISTORIQUE_FILE = Path("data/historique_trades.json")  # Persistant entre runs
 
 # ── Money management ────────────────────────────────────────────────────
 CAPITAL_INITIAL       = 100_000.0
-ALLOCATION_BASE       = 1_000.0   # Allocation standard par trade
-ALLOCATION_FORTE      = 1_200.0   # Conviction FORTE  → +20%
-ALLOCATION_FAIBLE     = 700.0     # Conviction FAIBLE → −30%
+ALLOCATION_EXCELLENCE = 1_500.0   # Score >= 90  → conviction maximale
+ALLOCATION_BASE       = 1_000.0   # Allocation standard par trade (score 65-74)
+ALLOCATION_FORTE      = 1_200.0   # Conviction FORTE  score 75-89 → +20%
+ALLOCATION_FAIBLE     = 700.0     # Conviction FAIBLE score 55-64 → −30%
 MAX_POSITIONS         = 9999  # Illimité — seul le cash disponible limite les positions
 STOP_LOSS_PCT         = 0.03      # Stop-loss fixe de secours 3%
 TAKE_PROFIT_PCT       = 0.045     # Take-profit fixe 4.5%
@@ -161,7 +162,7 @@ POIDS = {
 
 # ── Gestion du risque avancée ────────────────────────────────────────
 MAX_HEAT_PCT       = 8.0    # Portfolio heat max — bloque achats si > 8%
-MAX_DAILY_LOSS_PCT = 3.0    # Circuit breaker — stop trading si pertes jour > 3%
+MAX_DAILY_LOSS_PCT = 5.0    # Circuit breaker — stop trading si pertes jour > 5%
 
 # ── Portefeuille Long Terme — Sacha Pro (EXPÉRIMENTAL) ──────────────────
 # Petit budget séparé géré UNIQUEMENT par les crossovers EMA daily.
@@ -190,6 +191,7 @@ ACTIFS_ACTIONS = [
     "NIO", "UBER","LYFT","SNAP","RBLX",
     "HOOD","DKNG","PENN","GME", "AMC",
     "SPY", "QQQ", "KO",  "DAL", "BA",
+    "XLK", "XLV", "XLE", "XLF", "GLD",  # ETF sectoriels + or
 ]
 
 ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD", "SOL/USD"]   # Format Alpaca crypto (toujours actifs)
@@ -216,17 +218,19 @@ NB_ACTIONS_NUIT = len(ACTIFS_CRYPTO_NUIT)   # 10 actions top-score choisies dyna
 ACTIFS_TOUS = ACTIFS_ACTIONS + ACTIFS_CRYPTO
 
 SECTEURS = {
-    "TECH":    ["TSLA","NVDA","AMD","AMZN","NFLX","META","AAPL","MSFT","GOOGL","INTC"],
-    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD","SOL/USD",
-                "DOGE/USD","AVAX/USD","LINK/USD","LTC/USD","BCH/USD",
-                "XRP/USD","UNI/USD"],
-    "FINTECH": ["SOFI","PLTR"],
-    "EV":      ["RIVN","LCID","NIO"],
-    "MOBILITY":["UBER","LYFT"],
-    "SOCIAL":  ["SNAP","RBLX"],
-    "GAMING":  ["DKNG","PENN","GME","AMC"],
-    "ETF":     ["SPY","QQQ"],
-    "AUTRES":  ["KO","DAL","BA"],
+    "TECH":        ["TSLA","NVDA","AMD","AMZN","NFLX","META","AAPL","MSFT","GOOGL","INTC"],
+    "CRYPTO":      ["COIN","HOOD","BTC/USD","ETH/USD","SOL/USD",
+                    "DOGE/USD","AVAX/USD","LINK/USD","LTC/USD","BCH/USD",
+                    "XRP/USD","UNI/USD"],
+    "FINTECH":     ["SOFI","PLTR"],
+    "EV":          ["RIVN","LCID","NIO"],
+    "MOBILITY":    ["UBER","LYFT"],
+    "SOCIAL":      ["SNAP","RBLX"],
+    "GAMING":      ["DKNG","PENN","GME","AMC"],
+    "ETF":         ["SPY","QQQ"],
+    "ETF_SECTEUR": ["XLK","XLV","XLE","XLF"],
+    "METAUX":      ["GLD"],
+    "AUTRES":      ["KO","DAL","BA"],
 }
 MAX_PAR_SECTEUR = 2
 MAX_CRYPTO_EXPOSURE_PCT = 25.0  # Maximum 25% du capital total en crypto
@@ -234,7 +238,8 @@ MAX_CRYPTO_EXPOSURE_PCT = 25.0  # Maximum 25% du capital total en crypto
 DATA_DIR    = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json")).parent
 JSON_SORTIE = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
 INTERVALLE  = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
-COOLDOWNS_FILE = DATA_DIR / "cooldowns.json"   # persistance cooldowns entre runs
+COOLDOWNS_FILE      = DATA_DIR / "cooldowns.json"       # persistance cooldowns entre runs
+TRAILING_HIGHS_FILE = DATA_DIR / "trailing_highs.json"  # persistance trailing stop entre runs
 
 # ── Protection trading ────────────────────────────────────────────────────
 MAX_ACHATS_PAR_CYCLE  = 3       # Max nouveaux achats par cycle (actions)
@@ -2214,6 +2219,29 @@ class GestionnaireRisque:
         self.capital_initial = capital_initial
         self.trailing_highs: dict = {}
         self.logger = logging.getLogger("Risque")
+        self._charger_trailing_highs()
+
+    def _charger_trailing_highs(self):
+        """Charge les trailing highs depuis data/trailing_highs.json (persistant entre runs)."""
+        try:
+            if TRAILING_HIGHS_FILE.exists():
+                with open(TRAILING_HIGHS_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+                self.trailing_highs = {k: float(v) for k, v in data.items()}
+                if self.trailing_highs:
+                    self.logger.info(f"📂 Trailing highs chargés : {list(self.trailing_highs.keys())}")
+        except Exception as e:
+            self.logger.warning(f"Chargement trailing_highs : {e}")
+            self.trailing_highs = {}
+
+    def _sauvegarder_trailing_highs(self):
+        """Sauvegarde les trailing highs dans data/trailing_highs.json."""
+        try:
+            TRAILING_HIGHS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(TRAILING_HIGHS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.trailing_highs, f, indent=2)
+        except Exception as e:
+            self.logger.warning(f"Sauvegarde trailing_highs : {e}")
 
     def verifier_stop_loss(self, pos: dict) -> bool:
         ticker = pos.get("ticker", "")
@@ -2240,8 +2268,10 @@ class GestionnaireRisque:
         prix   = pos.get("current_price", 0)
         if ticker not in self.trailing_highs:
             self.trailing_highs[ticker] = prix
+            self._sauvegarder_trailing_highs()
         if prix > self.trailing_highs[ticker]:
             self.trailing_highs[ticker] = prix
+            self._sauvegarder_trailing_highs()
         plus_haut = self.trailing_highs[ticker]
         recul     = (plus_haut - prix) / plus_haut if plus_haut > 0 else 0
         plpc      = pos.get("unrealized_plpc", 0)
@@ -2267,7 +2297,8 @@ class GestionnaireRisque:
             elif conviction == "FAIBLE":
                 base *= 0.8
         else:
-            base = {"FORTE": ALLOCATION_FORTE,
+            base = {"EXCELLENCE": ALLOCATION_EXCELLENCE,
+                    "FORTE": ALLOCATION_FORTE,
                     "MOYENNE": ALLOCATION_BASE,
                     "FAIBLE": ALLOCATION_FAIBLE}.get(conviction, ALLOCATION_BASE)
         if atr_pct and atr_pct > 2.0:
@@ -2412,7 +2443,9 @@ class ScoreDecisionIA:
                 score_fusionne >= SEUIL_TECH_BUY):
 
                 action = "ACHAT"
-                if score_fusionne >= SEUIL_CONVICTION_FORTE:
+                if score_fusionne >= 90:
+                    conviction = "EXCELLENCE"
+                elif score_fusionne >= SEUIL_CONVICTION_FORTE:
                     conviction = "FORTE"
                 elif score_fusionne >= SEUIL_CONVICTION_FAIBLE:
                     conviction = "MOYENNE"
@@ -2476,6 +2509,8 @@ class BotRoute:
         self.strategie_sacha = StrategieSachaPro()
         self.portefeuille_lt = PortefeuilleLongTerme() if LT_ACTIF else None
         self._dernieres_decisions: dict = {}   # scores du cycle précédent → sélection nuit
+        self._dernier_resume_quotidien = None  # date ISO du dernier résumé quotidien envoyé
+        self._dernier_regime = None            # régime marché du cycle précédent
         self._fear_greed_value: int  = 50
         self._mins_depuis_open: float = 999.0
         self._mins_avant_close: float = 999.0
@@ -2503,6 +2538,47 @@ class BotRoute:
         self._charger_cooldowns()
 
     # ── Helpers protection trading ────────────────────────────────────────
+
+    def _mode_temporel(self) -> str:
+        """Retourne le mode temporel selon l'heure ET: OUVERTURE/NORMAL/CLOTURE/FERME"""
+        now_et = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-4)))  # EDT
+        heure  = now_et.hour
+        minute = now_et.minute
+        if now_et.weekday() >= 5:
+            return "FERME"
+        if heure == 9 and minute < 30:
+            return "FERME"
+        if heure == 9 and minute >= 30:
+            return "OUVERTURE"  # 9:30-10:00 = volatilité élevée
+        if heure >= 15 and heure < 16:
+            return "CLOTURE"   # 15:00-16:00 = préférer les ventes
+        if 10 <= heure < 15:
+            return "NORMAL"
+        return "FERME"
+
+    @staticmethod
+    def _generer_raison_simple(dec: dict, ticker: str) -> str:
+        """Traduit la décision technique en langage accessible."""
+        action = dec.get("action", "NEUTRE")
+        score  = dec.get("score_fusionne", 50)
+        raison = dec.get("raison", "")
+
+        if action == "ACHAT":
+            if score >= 85:
+                return f"💚 {ticker} montre des signaux très forts — tendance claire à la hausse avec confirmation volume"
+            elif score >= 70:
+                return f"📈 {ticker} en bonne forme — indicateurs positifs, momentum favorable"
+            else:
+                return f"🟡 {ticker} légèrement positif — signal modéré, position prudente"
+        elif action == "VENTE":
+            if "stop" in raison.lower() or "loss" in raison.lower():
+                return f"🔴 {ticker} a atteint la limite de perte — vente automatique pour protéger le capital"
+            elif "profit" in raison.lower() or "tp" in raison.lower():
+                return f"✅ {ticker} a atteint l'objectif de gain — prise de bénéfices"
+            else:
+                return f"📉 {ticker} montre des signaux de faiblesse — réduction de la position"
+        else:
+            return f"⏸️ {ticker} — pas d'opportunité claire en ce moment"
 
     def _en_cooldown(self, ticker: str) -> bool:
         return time.time() < self._cooldown.get(ticker, 0)
@@ -3076,6 +3152,19 @@ class BotRoute:
             except Exception as e:
                 self.logger.warning(f"Watchlist save: {e}")
 
+    def _verifier_sante_bot(self):
+        """Envoie une alerte Discord si le bot ne tourne pas correctement."""
+        try:
+            if JSON_SORTIE.exists():
+                age = time.time() - JSON_SORTIE.stat().st_mtime
+                if age > 900:  # 15 minutes
+                    self.discord._envoyer(
+                        f"🚨 **ALERTE — Bot inactif** | Dernier update: il y a {age/60:.0f} min\n"
+                        f"→ Vérifier GitHub Actions : https://github.com/lechat45/bot.github.io/actions"
+                    )
+        except Exception as e:
+            self.logger.warning(f"Santé bot: {e}")
+
     def _verifier_circuit_breaker(self) -> tuple:
         """
         Circuit Breaker : arrête le trading si pertes journalières > MAX_DAILY_LOSS_PCT.
@@ -3505,6 +3594,20 @@ class BotRoute:
                 base["action_executee"] = "PRÉPARE"
             return base
 
+        # ── Mode temporel — stratégies par heure ─────────────────────────────
+        mode_temp = self._mode_temporel()
+        if dec["action"] == "ACHAT" and not self.pause_drawdown:
+            # ── Filtre mode OUVERTURE : bloquer nouveaux achats 9:30-10:00 ──
+            if mode_temp == "OUVERTURE" and "/" not in ticker:
+                base["raison"] = "⏰ Ouverture marché — attente 30min (volatilité élevée)"
+                return base
+            # ── Mode CLOTURE : seuil d'achat rehaussé de 5pts ─────────────
+            if mode_temp == "CLOTURE" and "/" not in ticker:
+                seuil_cloture = SEUIL_TECH_BUY + 5
+                if dec["score_fusionne"] < seuil_cloture:
+                    base["raison"] = f"⏰ Clôture proche — score {dec['score_fusionne']:.0f} < {seuil_cloture} (seuil renforcé)"
+                    return base
+
         if dec["action"] == "ACHAT" and not self.pause_drawdown:
             # ── Limite exposition totale crypto (avant tous les autres garde-fous) ──
             if "/" in ticker and not dans_position:
@@ -3609,7 +3712,9 @@ class BotRoute:
                     except Exception as e:
                         base["raison"] = f"Erreur ordre : {e}"
 
-        elif dec["action"] == "VENTE" and dans_position:
+        elif (dec["action"] == "VENTE" or
+              (dans_position and mode_temp == "CLOTURE" and
+               dec["score_fusionne"] < (SEUIL_TECH_BUY - 10) and "/" not in ticker)) and dans_position:
             # ── Protection portefeuille long terme ────────────────────────────
             # Si ce ticker est tenu par le portefeuille LT, le bot CT ne peut pas vendre.
             # Seul _gerer_portefeuille_lt() peut déclencher la vente (crossunder daily).
@@ -3646,6 +3751,9 @@ class BotRoute:
                 self.logger.info(
                     f"[VENTE] {ticker} P&L {pos.get('unrealized_plpc',0):.2f}% | {dec['raison'][:60]}"
                 )
+
+        # ── Raison en langage simple pour le dashboard ────────────────────
+        base["raison_simple"] = self._generer_raison_simple(dec, ticker)
 
         return base
 
@@ -3794,6 +3902,9 @@ class BotRoute:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
 
+        # ── Santé bot — alerte si JSON vieux > 15 min ──────────────────────
+        self._verifier_sante_bot()
+
         self._achats_ce_cycle = 0      # reset compteur achats actions par cycle
         self._achats_crypto_cycle = 0  # reset compteur achats crypto par cycle
         marche_ouvert = self.alpaca.marche_ouvert()
@@ -3849,6 +3960,17 @@ class BotRoute:
         self._prefetch_barres_parallele(actifs_prefetch)
         # Régime de marché
         regime_marche = self.regime_det.detecter(self.df_spy, self.df_qqq)
+
+        # ── Notification Discord si changement de régime ──────────────────
+        if self._dernier_regime and regime_marche.get('regime') != self._dernier_regime:
+            emoji = {"HAUSSIER": "🟢", "BAISSIER": "🔴", "LATÉRAL": "🟡"}.get(
+                regime_marche.get('regime', ''), '⚪')
+            self.discord._envoyer(
+                f"{emoji} **CHANGEMENT RÉGIME MARCHÉ**\n"
+                f"{self._dernier_regime} → {regime_marche.get('regime', '?')}\n"
+                f"{regime_marche.get('description', '')}"
+            )
+        self._dernier_regime = regime_marche.get('regime')
 
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
         # Alerte Discord préventive à 3% de drawdown (avant la pause à 5%)
@@ -4026,6 +4148,34 @@ class BotRoute:
                 len(positions_apres), achats, ventes
             )
 
+        # ── Résumé quotidien Discord à 16:05 ET (une seule fois par jour) ──
+        now_et = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-4)))
+        if now_et.hour == 16 and now_et.minute == 5:
+            today_key = now_et.date().isoformat()
+            last_daily = getattr(self, '_dernier_resume_quotidien', None)
+            if last_daily != today_key:
+                self._dernier_resume_quotidien = today_key
+                nb_pos     = len(positions_apres)
+                gagnants   = [t for t, p in positions_apres.items() if float(p.get("unrealized_pl", 0)) > 0]
+                perdants   = [t for t, p in positions_apres.items() if float(p.get("unrealized_pl", 0)) < 0]
+                meilleur   = (max(positions_apres.items(),
+                                  key=lambda x: float(x[1].get("unrealized_plpc", 0)),
+                                  default=(None, None)) if positions_apres else (None, None))
+                pire       = (min(positions_apres.items(),
+                                  key=lambda x: float(x[1].get("unrealized_plpc", 0)),
+                                  default=(None, None)) if positions_apres else (None, None))
+                msg = (
+                    f"📊 **RÉSUMÉ QUOTIDIEN — {today_key}**\n"
+                    f"💰 Capital: ${compte['equity']:,.0f} | PnL jour: ${pnl_jour:+.2f}\n"
+                    f"📁 Positions: {nb_pos} ({len(gagnants)} ✅ | {len(perdants)} ❌)\n"
+                )
+                if meilleur[0]:
+                    msg += f"🏆 Meilleur: {meilleur[0]} {float(meilleur[1].get('unrealized_plpc', 0))*100:+.1f}%\n"
+                if pire[0]:
+                    msg += f"⚠️ Pire: {pire[0]} {float(pire[1].get('unrealized_plpc', 0))*100:+.1f}%\n"
+                msg += f"📈 Régime marché: {regime_marche.get('regime', '?')}"
+                self.discord._envoyer(msg)
+
         # Métriques de performance depuis SQLite
         metriques = self.persistance.calculer_metriques()
 
@@ -4045,6 +4195,7 @@ class BotRoute:
                 "sentiment_engine":"Groq Cloud llama-3.3-70b",
                 "pause_drawdown":  self.pause_drawdown,
                 "marche_ouvert":   marche_ouvert,
+                "mode_temporel":   self._mode_temporel(),
             },
             "portefeuille": {
                 "capital_initial":   self.risque.capital_initial,
