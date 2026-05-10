@@ -817,6 +817,18 @@
     .shell > *:nth-child(6){animation-delay:.25s}
     .shell > *:nth-child(7){animation-delay:.30s}
     .shell > *:nth-child(8){animation-delay:.35s}
+
+    /* ── Onglets de navigation ─── */
+    .tab-nav{display:flex;gap:4px;padding:10px 0 0;border-bottom:2px solid rgba(0,255,242,0.12);margin-bottom:20px}
+    .tab-btn{background:transparent;border:none;color:var(--dim);font:600 12px 'JetBrains Mono',monospace;letter-spacing:1px;padding:8px 20px;border-radius:6px 6px 0 0;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-2px}
+    .tab-btn:hover{color:var(--cyn);background:rgba(0,255,242,0.05)}
+    .tab-btn.active{color:var(--cyn);background:rgba(0,255,242,0.08);border-bottom:2px solid var(--cyn)}
+    .tab-icon{font-size:14px}
+    .tab-section{display:none}.tab-section.active{display:contents}
+
+    /* ── Card details toggle ─── */
+    .card-details{transition:all .3s}.card-details.hidden{display:none!important}
+    .card-summary{cursor:pointer}.card-summary:hover{background:rgba(0,255,242,0.04)}
   </style>
 </head>
 <body>
@@ -856,8 +868,22 @@
       <span class="pill mkt-closed" id="pill-market">◷ MARKET ?</span>
       <span class="pill" id="pill-status">● Init…</span>
       <span class="pill pause" id="pill-pause" style="display:none">⏸ DRAWDOWN</span>
+      <span id="crypto-nuit-badge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.3);color:#00e5ff;font:600 10px 'JetBrains Mono',monospace">₿ CRYPTO 24/7</span>
     </div>
   </div>
+
+  <!-- Navigation Onglets -->
+  <nav class="tab-nav" id="tab-nav">
+    <button class="tab-btn active" data-tab="live" onclick="switchTab('live')">
+      <span class="tab-icon">📊</span> LIVE
+    </button>
+    <button class="tab-btn" data-tab="performance" onclick="switchTab('performance')">
+      <span class="tab-icon">📈</span> PERFORMANCE
+    </button>
+    <button class="tab-btn" data-tab="strategie" onclick="switchTab('strategie')">
+      <span class="tab-icon">⚡</span> STRATÉGIE
+    </button>
+  </nav>
 
   <!-- Métriques hero -->
   <div class="mets">
@@ -933,6 +959,11 @@
     <div class="chip x"><span class="k">SHARPE</span><span class="v" id="m-sharpe">—</span></div>
     <div class="chip"><span class="k">TOTAL P&amp;L</span><span class="v" id="m-totalpnl">—</span></div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB : LIVE — Graphique, positions, décisions, scanner
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-section active" id="tab-live">
 
   <!-- Graphique equity -->
   <div class="chart-wrap">
@@ -1034,27 +1065,15 @@
     </div>
   </div>
 
-      <!-- ─── SECTION 5 : Shadow Portfolio + Signal Scanner ─── -->
-      <section class="two-col" style="margin-top:20px">
+  </div><!-- /tab-live -->
 
-        <!-- Shadow Portfolio -->
-        <div class="card">
-          <div class="phd">
-            <span class="phd-l">
-              <span class="phd-icon">👻</span> SHADOW PORTFOLIO
-            </span>
-            <span class="phd-r" id="shadow-pnl" style="font-size:13px">P&amp;L —</span>
-          </div>
-          <div class="card-body">
-            <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap">
-              <div class="kpi-mini"><span id="shadow-nb-pos">0</span><label>positions</label></div>
-              <div class="kpi-mini"><span id="shadow-cash">—</span><label>cash virtuel</label></div>
-              <div class="kpi-mini"><span id="shadow-wr">—</span><label>win rate</label></div>
-              <div class="kpi-mini"><span id="shadow-nb-trades">0</span><label>trades sim.</label></div>
-            </div>
-            <div id="shadow-positions" class="shadow-grid"></div>
-          </div>
-        </div>
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB : PERFORMANCE — Equity, trades, shadow portfolio, backtest
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-section" id="tab-performance">
+
+      <!-- ─── LIVE : Scanner Signaux + Régime/Reddit + Stress Test ─── -->
+      <section class="two-col" style="margin-top:20px">
 
         <!-- Signal Scanner -->
         <div class="card">
@@ -1068,11 +1087,6 @@
             <div id="scanner-list" class="scanner-list"></div>
           </div>
         </div>
-
-      </section>
-
-      <!-- ─── SECTION 6 : Régime + Reddit + Stress Test ─── -->
-      <section class="two-col" style="margin-top:20px">
 
         <!-- Régime marché + Reddit Veille -->
         <div class="card">
@@ -1088,36 +1102,6 @@
             <div style="margin-top:14px;margin-bottom:6px;font:600 11px 'JetBrains Mono',sans-serif;color:var(--dim);letter-spacing:1px">REDDIT BUZZ</div>
             <div id="reddit-chips" class="reddit-chips"></div>
             <div id="reddit-meta" style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim);margin-top:6px">—</div>
-          </div>
-        </div>
-
-        <!-- Fear & Greed + Yahoo Trending -->
-        <div class="card">
-          <div class="phd">
-            <span class="phd-l"><span class="phd-icon">😱</span> FEAR &amp; GREED</span>
-            <span class="phd-r" id="fg-label-badge" style="font-size:11px;color:var(--dim)">—</span>
-          </div>
-          <div class="card-body">
-            <div class="fg-gauge-wrap">
-              <svg class="fg-arc" viewBox="0 0 160 80" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
-                <path id="fg-arc-fill" d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="var(--cyn)" stroke-width="12" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
-                <text x="80" y="72" text-anchor="middle" font-family="Rajdhani" font-size="28" font-weight="800" fill="var(--cyn)" id="fg-value-svg">—</text>
-              </svg>
-              <div class="fg-label" id="fg-label-txt">—</div>
-              <div class="fg-delta" id="fg-delta-txt" style="color:var(--dim)">—</div>
-            </div>
-            <div class="fg-zones">
-              <span class="fg-zone fg-ef" id="fg-ef">Peur Extrême</span>
-              <span class="fg-zone fg-f"  id="fg-f">Peur</span>
-              <span class="fg-zone fg-n"  id="fg-n">Neutre</span>
-              <span class="fg-zone fg-g"  id="fg-g">Avidité</span>
-              <span class="fg-zone fg-eg" id="fg-eg">Avidité Extrême</span>
-            </div>
-            <div style="margin-top:14px">
-              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">YAHOO TRENDING 🔥</div>
-              <div id="yahoo-trending" class="yahoo-chips"><span style="color:var(--dim);font-size:11px">—</span></div>
-            </div>
           </div>
         </div>
 
@@ -1146,7 +1130,38 @@
 
       </section>
 
-      <!-- ─── SECTION 7 : Monte Carlo + Circuit Breaker ─── -->
+  </div><!-- /tab-performance -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB : PERFORMANCE — Shadow portfolio, Monte Carlo + Circuit Breaker
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-section" id="tab-performance">
+
+      <!-- ─── PERFORMANCE : Shadow Portfolio ─── -->
+      <section class="two-col" style="margin-top:20px">
+
+        <!-- Shadow Portfolio -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l">
+              <span class="phd-icon">👻</span> SHADOW PORTFOLIO
+            </span>
+            <span class="phd-r" id="shadow-pnl" style="font-size:13px">P&amp;L —</span>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap">
+              <div class="kpi-mini"><span id="shadow-nb-pos">0</span><label>positions</label></div>
+              <div class="kpi-mini"><span id="shadow-cash">—</span><label>cash virtuel</label></div>
+              <div class="kpi-mini"><span id="shadow-wr">—</span><label>win rate</label></div>
+              <div class="kpi-mini"><span id="shadow-nb-trades">0</span><label>trades sim.</label></div>
+            </div>
+            <div id="shadow-positions" class="shadow-grid"></div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ─── PERFORMANCE : Monte Carlo + Circuit Breaker ─── -->
       <section class="two-col" style="margin-top:20px">
 
         <!-- Monte Carlo Distribution -->
@@ -1234,6 +1249,53 @@
           </div>
         </div>
 
+      </section>
+
+  </div><!-- /tab-performance -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB : STRATÉGIE — Fear & Greed, Yahoo, Earnings, LT, Sacha Pro
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-section" id="tab-strategie">
+
+      <!-- ─── STRATÉGIE : Fear & Greed + Yahoo Trending ─── -->
+      <section class="two-col" style="margin-top:20px">
+
+        <!-- Fear & Greed + Yahoo Trending -->
+        <div class="card">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">😱</span> FEAR &amp; GREED</span>
+            <span class="phd-r" id="fg-label-badge" style="font-size:11px;color:var(--dim)">—</span>
+          </div>
+          <div class="card-body">
+            <div class="fg-gauge-wrap">
+              <svg class="fg-arc" viewBox="0 0 160 80" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
+                <path id="fg-arc-fill" d="M10,80 A70,70 0 0,1 150,80" fill="none" stroke="var(--cyn)" stroke-width="12" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
+                <text x="80" y="72" text-anchor="middle" font-family="Rajdhani" font-size="28" font-weight="800" fill="var(--cyn)" id="fg-value-svg">—</text>
+              </svg>
+              <div class="fg-label" id="fg-label-txt">—</div>
+              <div class="fg-delta" id="fg-delta-txt" style="color:var(--dim)">—</div>
+            </div>
+            <div class="fg-zones">
+              <span class="fg-zone fg-ef" id="fg-ef">Peur Extrême</span>
+              <span class="fg-zone fg-f"  id="fg-f">Peur</span>
+              <span class="fg-zone fg-n"  id="fg-n">Neutre</span>
+              <span class="fg-zone fg-g"  id="fg-g">Avidité</span>
+              <span class="fg-zone fg-eg" id="fg-eg">Avidité Extrême</span>
+            </div>
+            <div style="margin-top:14px">
+              <div style="font:600 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px;margin-bottom:6px">YAHOO TRENDING 🔥</div>
+              <div id="yahoo-trending" class="yahoo-chips"><span style="color:var(--dim);font-size:11px">—</span></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ─── STRATÉGIE : Earnings + LT + Sacha Pro ─── -->
+      <section class="two-col" style="margin-top:20px">
+
         <!-- Earnings Blackout Calendar -->
         <div class="card">
           <div class="phd">
@@ -1311,6 +1373,8 @@
         </div>
 
       </section>
+
+  </div><!-- /tab-strategie -->
 
   <footer class="footer" id="footer">
     ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">Groq Cloud llama-3.3-70b</span> · En attente…
@@ -1448,6 +1512,13 @@ function render(data) {
   const mode = (meta.mode||'PAPER').toUpperCase();
   $('pill-mode').textContent = (mode==='PAPER' ? '▲ PAPER' : '◆ LIVE');
   $('pill-mode').className = 'pill ' + (mode==='PAPER' ? 'paper' : 'live');
+
+  // Badge crypto nuit
+  const cryptoNuitEl = document.getElementById('crypto-nuit-badge');
+  if (cryptoNuitEl) {
+    const isCryptoNuit = !meta?.marche_ouvert;
+    cryptoNuitEl.style.display = isCryptoNuit ? 'inline-flex' : 'none';
+  }
 
   // Config
   $('c-sl').textContent  = `${cfg.stop_loss_pct??3}%`;
@@ -2636,6 +2707,18 @@ function renderSachaPro(decisions) {
       </div>`;
   }).join('');
 }
+
+/* ── Navigation par onglets ──────────────────────────────── */
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  localStorage.setItem('activeTab', name);
+}
+// Restaurer l'onglet actif au chargement
+(function(){
+  const saved = localStorage.getItem('activeTab') || 'live';
+  setTimeout(() => switchTab(saved), 0);
+})();
 
 /* ── Earnings Blackout + Fondamentaux ─────────────────────── */
 function renderEarnings(decisions) {

@@ -214,10 +214,21 @@ JSON_SORTIE = Path(os.environ.get("BOT_DATA_PATH", "data/etat_bot.json"))
 INTERVALLE  = int(os.environ.get("BOT_INTERVAL_SEC", "60"))
 
 # ── Protection trading ────────────────────────────────────────────────────
-MAX_ACHATS_PAR_CYCLE  = 3       # Max nouveaux achats par cycle
-COOLDOWN_APRES_ACHAT  = 1800    # 30 min de cooldown après un achat
-SEUIL_CRYPTO_WEEKEND  = 70      # Score minimum crypto le weekend
+MAX_ACHATS_PAR_CYCLE  = 3       # Max nouveaux achats par cycle (actions)
+MAX_ACHATS_CRYPTO_NUIT= 5       # Max achats crypto quand marché actions fermé (24/7)
+COOLDOWN_APRES_ACHAT  = 1800    # 30 min cooldown après un achat (actions)
+COOLDOWN_CRYPTO_NUIT  = 900     # 15 min cooldown crypto hors marché (plus réactif)
+SEUIL_CRYPTO_WEEKEND  = 55      # Score minimum crypto le weekend (baissé: 70→55)
 BARRES_CACHE_TTL      = 300     # Cache OHLC 5 min pour éviter les requêtes redondantes
+
+# ── Mode Crypto Nuit/Weekend ─────────────────────────────────────────────
+# Quand le marché actions est fermé, le bot se concentre sur les cryptos (24/7).
+# Les cryptos reçoivent : barres 30min (plus granulaires), allocation +30%,
+# seuil de score abaissé, et les ordres sont TOUJOURS exécutés (pas de blocage).
+CRYPTO_NUIT_BARRES_MIN = 30     # Timeframe 30 min pour crypto hors marché
+CRYPTO_NUIT_ALLOC_MULT = 1.30   # +30% d'allocation crypto quand marché fermé
+CRYPTO_NUIT_RSI_PERIODE= 9      # RSI 9 périodes (plus réactif que 14)
+CRYPTO_NUIT_SEUIL_BUY  = 52     # Seuil score plus bas la nuit (marché moins actif)
 
 # Groupes d'actifs très corrélés — un seul acheté à la fois
 GROUPES_CORRELES = [
@@ -382,6 +393,42 @@ class AlpacaClientV2:
         except Exception as e:
             self.logger.warning(f"Barres {ticker} : {e}")
             return pd.DataFrame()
+
+    def get_barres_crypto_nuit(self, ticker: str) -> pd.DataFrame:
+        """
+        Barres 30 minutes pour crypto hors heures de marché.
+        Plus granulaires que les barres 1h → signaux plus réactifs la nuit/weekend.
+        Cache 10 min (TTL court car marché crypto bouge vite).
+        """
+        if "/" not in ticker:
+            return self.get_barres(ticker)   # fallback barres 1h pour non-crypto
+
+        cache_key = f"{ticker}_30m"
+        now = time.time()
+        if (cache_key in self._cache_bars and
+                (now - self._cache_bars_ts.get(cache_key, 0)) < 600):   # 10 min cache
+            return self._cache_bars[cache_key]
+        try:
+            end   = datetime.now(timezone.utc)
+            start = end - timedelta(days=4)   # 4 jours de 30min = ~192 bougies
+            df = self.api.get_crypto_bars(
+                ticker,
+                TimeFrame.Minute * 30,
+                start=start.strftime("%Y-%m-%d"),
+                end=end.strftime("%Y-%m-%d"),
+                limit=200,
+            ).df
+            if df is None or df.empty:
+                return self.get_barres(ticker)   # fallback 1h
+            df.columns = [c.lower() for c in df.columns]
+            df = df.sort_index()
+            self._cache_bars[cache_key]    = df
+            self._cache_bars_ts[cache_key] = time.time()
+            self.logger.info(f"Barres 30m {ticker} : {len(df)} bougies (mode nuit)")
+            return df
+        except Exception as e:
+            self.logger.debug(f"Barres 30m {ticker}: {e} — fallback 1h")
+            return self.get_barres(ticker)
 
     def get_barres_daily(self, ticker: str, jours: int = 90) -> pd.DataFrame:
         """
@@ -2404,9 +2451,11 @@ class BotRoute:
     def _en_cooldown(self, ticker: str) -> bool:
         return time.time() < self._cooldown.get(ticker, 0)
 
-    def _definir_cooldown(self, ticker: str):
-        self._cooldown[ticker] = time.time() + COOLDOWN_APRES_ACHAT
-        self.logger.debug(f"Cooldown {ticker} : {COOLDOWN_APRES_ACHAT // 60} min")
+    def _definir_cooldown(self, ticker: str, crypto_nuit: bool = False):
+        """Cooldown réduit pour crypto hors heures de marché (plus réactif)."""
+        duree = COOLDOWN_CRYPTO_NUIT if (crypto_nuit and "/" in ticker) else COOLDOWN_APRES_ACHAT
+        self._cooldown[ticker] = time.time() + duree
+        self.logger.debug(f"Cooldown {ticker} : {duree // 60} min")
 
     def _actifs_correles(self, ticker: str, positions: dict) -> bool:
         """Retourne True si un actif fortement corrélé est déjà en position."""
@@ -3182,9 +3231,11 @@ class BotRoute:
                     self.logger.info(f"[AUTO] {ticker} — {raison}")
 
     def _analyser_actif(self, ticker: str, positions: dict, compte: dict,
-                        executer: bool = True, kelly_base: float = None) -> dict:
+                        executer: bool = True, kelly_base: float = None,
+                        mode_crypto_nuit: bool = False) -> dict:
         base = {
             "ticker": ticker, "action_executee": "AUCUNE",
+            "mode_crypto_nuit": mode_crypto_nuit,
             "score_technique": 50, "score_sentiment": 0.55,
             "score_fusionne": 50, "conviction": "FAIBLE",
             "signal_technique": "HOLD", "biais_groq": "neutre",
@@ -3204,7 +3255,11 @@ class BotRoute:
         dans_position = ticker in positions or ticker_norm in positions
 
         # ── 1. Données OHLC via SDK Alpaca ────────────────────────────────
-        df = self.alpaca.get_barres(ticker)
+        # Mode nuit crypto : barres 30min (plus réactives que 1h)
+        if mode_crypto_nuit and "/" in ticker:
+            df = self.alpaca.get_barres_crypto_nuit(ticker)
+        else:
+            df = self.alpaca.get_barres(ticker)
         if df.empty or len(df) < 50:
             base["raison"] = "Données OHLC insuffisantes"
             return base
@@ -3273,16 +3328,32 @@ class BotRoute:
                 "biais": "neutre", "facteurs_positifs": [],
                 "facteurs_negatifs": [], "source": "skip"}
 
+        # ── Mode crypto nuit : boost score + seuil abaissé ───────────────────
+        if mode_crypto_nuit and "/" in ticker:
+            # +15% boost sur score technique (crypto seule active, signaux plus purs)
+            tech["score"] = min(100.0, tech["score"] * 1.15)
+            base["score_technique"] = tech["score"]
+            # Seuil d'analyse abaissé en mode nuit
+            seuil_groq_crypto = CRYPTO_NUIT_SEUIL_BUY
+        else:
+            seuil_groq_crypto = SEUIL_CONVICTION_FAIBLE
+
         should_analyze_groq = (
-            (tech["signal"] == "BUY"  and tech["score"] >= SEUIL_CONVICTION_FAIBLE) or
+            (tech["signal"] == "BUY"  and tech["score"] >= seuil_groq_crypto) or
             tech["signal"] == "SELL" or
             dans_position
         )
-        # Quand marché fermé : n'appeler l'IA QUE si déjà en cache (évite les 429 inutiles)
-        if not executer:
+        # Quand marché ACTIONS fermé mais crypto active : analyser en cache prioritaire
+        # Pour les cryptos avec signal fort, on force l'analyse même sans cache
+        if not executer and not mode_crypto_nuit:
             should_analyze_groq = should_analyze_groq and (
                 ticker in self.sentiment._cache or ticker in self.gemini._cache
             )
+        elif not executer and mode_crypto_nuit and "/" in ticker:
+            # Crypto nuit : analyse si signal fort (même sans cache)
+            should_analyze_groq = (
+                tech["signal"] == "BUY" and tech["score"] >= seuil_groq_crypto
+            ) or dans_position
         if should_analyze_groq:
             sent = self.sentiment.scorer(
                 ticker, tech["prix"] or 0,
@@ -3333,12 +3404,13 @@ class BotRoute:
             elif self._en_cooldown(ticker):
                 reste = int(self._cooldown[ticker] - time.time())
                 base["raison"] = f"Cooldown actif — {reste // 60}min {reste % 60}s restants"
-            elif self._achats_ce_cycle >= MAX_ACHATS_PAR_CYCLE:
-                base["raison"] = f"Limite {MAX_ACHATS_PAR_CYCLE} achats/cycle atteinte"
+            elif self._achats_ce_cycle >= (MAX_ACHATS_CRYPTO_NUIT if mode_crypto_nuit else MAX_ACHATS_PAR_CYCLE):
+                limite = MAX_ACHATS_CRYPTO_NUIT if mode_crypto_nuit else MAX_ACHATS_PAR_CYCLE
+                base["raison"] = f"Limite {limite} achats/cycle atteinte {'(mode crypto nuit)' if mode_crypto_nuit else ''}"
             elif self._actifs_correles(ticker, positions):
                 base["raison"] = "Actif corrélé déjà en position"
-            elif "/" in ticker and datetime.now(timezone.utc).weekday() >= 5 and tech["score"] < SEUIL_CRYPTO_WEEKEND:
-                base["raison"] = f"Mode weekend crypto — score {tech['score']:.0f} < {SEUIL_CRYPTO_WEEKEND}"
+            elif "/" in ticker and tech["score"] < SEUIL_CRYPTO_WEEKEND and not mode_crypto_nuit:
+                base["raison"] = f"Score crypto insuffisant — {tech['score']:.0f} < {SEUIL_CRYPTO_WEEKEND}"
             elif not self.risque.secteur_ok(ticker, positions):
                 base["raison"] = f"Secteur saturé (max {MAX_PAR_SECTEUR})"
             elif self._portfolio_heat >= MAX_HEAT_PCT:
@@ -3356,6 +3428,9 @@ class BotRoute:
                 montant = self.risque.allocation(
                     dec["conviction"], tech["indicateurs"].get("atr_pct"),
                     kelly_base=kelly_base)
+                # Boost allocation crypto la nuit (seule opportunité active)
+                if mode_crypto_nuit and "/" in ticker:
+                    montant = round(montant * CRYPTO_NUIT_ALLOC_MULT, 2)
                 if not self.risque.capital_suffisant(compte, montant):
                     base["raison"] = f"Capital insuffisant (besoin ${montant:.0f})"
                 else:
@@ -3374,7 +3449,7 @@ class BotRoute:
                         }
                         self.historique_trades.append(trade)
                         self.persistance.sauvegarder(trade)
-                        self._definir_cooldown(ticker)
+                        self._definir_cooldown(ticker, crypto_nuit=mode_crypto_nuit)
                         self._achats_ce_cycle += 1
                         self._sauvegarder_historique()
                         self.discord.notifier_achat(
@@ -3652,13 +3727,27 @@ class BotRoute:
         except Exception:
             pass
 
-        # Marché ouvert + pas de circuit breaker = exécution réelle
-        executer = marche_ouvert and not circuit_ouvert
+        # ── Exécution : crypto toujours active (24/7), actions selon marché ────
+        executer_actions = marche_ouvert and not circuit_ouvert
+        executer_crypto  = not circuit_ouvert   # Crypto s'exécute TOUJOURS (24/7)
+        mode_crypto_nuit = not marche_ouvert    # True = marché fermé → focus crypto
+
         decisions = []
-        for ticker in ACTIFS_TOUS:
-            time.sleep(0.02)   # réduit car prefetch parallèle a déjà chargé les données
-            d = self._analyser_actif(ticker, positions, compte,
-                                     executer=executer, kelly_base=kelly_base)
+        # Ordre d'analyse : crypto en premier si marché fermé (priorité)
+        tickers_ordonnes = (
+            ACTIFS_CRYPTO + ACTIFS_ACTIONS if mode_crypto_nuit
+            else ACTIFS_TOUS
+        )
+        for ticker in tickers_ordonnes:
+            time.sleep(0.02)
+            is_crypto = "/" in ticker
+            executer  = executer_crypto if is_crypto else executer_actions
+            d = self._analyser_actif(
+                ticker, positions, compte,
+                executer=executer,
+                kelly_base=kelly_base,
+                mode_crypto_nuit=(mode_crypto_nuit and is_crypto),
+            )
             decisions.append(d)
 
         # ── Portefeuille Long Terme — Sacha Pro (expérimental) ───────────────

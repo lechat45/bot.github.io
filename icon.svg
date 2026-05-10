@@ -1,33 +1,68 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Fond -->
-  <rect width="512" height="512" rx="80" fill="#0a0e1a"/>
-  <!-- Grille de fond -->
-  <line x1="0" y1="170" x2="512" y2="170" stroke="#00e5ff" stroke-width="1" opacity="0.1"/>
-  <line x1="0" y1="340" x2="512" y2="340" stroke="#00e5ff" stroke-width="1" opacity="0.1"/>
-  <line x1="170" y1="0" x2="170" y2="512" stroke="#00e5ff" stroke-width="1" opacity="0.1"/>
-  <line x1="340" y1="0" x2="340" y2="512" stroke="#00e5ff" stroke-width="1" opacity="0.1"/>
-  <!-- Courbe graphique style bourse -->
-  <polyline points="40,360 100,300 160,320 220,240 280,260 340,180 400,200 460,140"
-            fill="none" stroke="#00ff88" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
-  <!-- Points sur la courbe -->
-  <circle cx="220" cy="240" r="10" fill="#00ff88" opacity="0.9"/>
-  <circle cx="340" cy="180" r="10" fill="#00ff88" opacity="0.9"/>
-  <circle cx="460" cy="140" r="14" fill="#00ff88"/>
-  <!-- Tête du robot -->
-  <rect x="176" y="60" width="160" height="130" rx="20" fill="none" stroke="#00e5ff" stroke-width="6"/>
-  <rect x="176" y="60" width="160" height="130" rx="20" fill="#00e5ff" opacity="0.07"/>
-  <!-- Yeux du robot -->
-  <rect x="205" y="100" width="40" height="24" rx="6" fill="#00e5ff" opacity="0.9"/>
-  <rect x="267" y="100" width="40" height="24" rx="6" fill="#00e5ff" opacity="0.9"/>
-  <!-- Bouche robot -->
-  <rect x="210" y="145" width="92" height="10" rx="5" fill="#00ff88" opacity="0.7"/>
-  <!-- Antenne -->
-  <line x1="256" y1="60" x2="256" y2="30" stroke="#00e5ff" stroke-width="5" stroke-linecap="round"/>
-  <circle cx="256" cy="22" r="10" fill="#00e5ff"/>
-  <!-- Texte ROUTE -->
-  <text x="256" y="470" text-anchor="middle" font-family="Arial Black,sans-serif"
-        font-size="72" font-weight="900" letter-spacing="4" fill="#00e5ff" opacity="0.95">ROUTE</text>
-  <!-- Sous-texte v4 -->
-  <text x="256" y="498" text-anchor="middle" font-family="Arial,sans-serif"
-        font-size="22" fill="#00ff88" opacity="0.8">/v4 TRADING BOT</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#050c1a"/>
+      <stop offset="100%" stop-color="#0a1628"/>
+    </linearGradient>
+    <linearGradient id="lineGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#00ff88"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Fond arrondi -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Bordure subtile -->
+  <rect width="512" height="512" rx="96" fill="none"
+        stroke="#00e5ff" stroke-width="3" opacity="0.15"/>
+
+  <!-- Courbe de marché — occupe toute la largeur, zone basse -->
+  <polyline
+    points="48,340 110,290 175,310 235,240 295,255 360,185 420,200 464,152"
+    fill="none" stroke="url(#lineGrad)" stroke-width="14"
+    stroke-linecap="round" stroke-linejoin="round"
+    filter="url(#glow)"/>
+
+  <!-- Zone sous la courbe (fill dégradé) -->
+  <polygon
+    points="48,340 110,290 175,310 235,240 295,255 360,185 420,200 464,152 464,380 48,380"
+    fill="url(#lineGrad)" opacity="0.07"/>
+
+  <!-- Point final brillant -->
+  <circle cx="464" cy="152" r="18" fill="#00ff88" filter="url(#glow2)" opacity="0.9"/>
+  <circle cx="464" cy="152" r="9"  fill="#ffffff"/>
+
+  <!-- Lettre R — grande, bold, centrée haut -->
+  <text x="136" y="175"
+        font-family="'Arial Black','Impact',sans-serif"
+        font-size="195" font-weight="900"
+        fill="#00e5ff" filter="url(#glow)" opacity="0.95"
+        letter-spacing="-6">R</text>
+
+  <!-- Chiffre 4 à droite du R -->
+  <text x="298" y="175"
+        font-family="'Arial Black','Impact',sans-serif"
+        font-size="195" font-weight="900"
+        fill="#00ff88" filter="url(#glow)" opacity="0.95">4</text>
+
+  <!-- Ligne séparatrice fine -->
+  <line x1="64" y1="395" x2="448" y2="395"
+        stroke="#00e5ff" stroke-width="2" opacity="0.2"/>
+
+  <!-- Sous-texte TRADING BOT -->
+  <text x="256" y="460"
+        text-anchor="middle"
+        font-family="'Arial','Helvetica',sans-serif"
+        font-size="36" font-weight="700"
+        fill="#00e5ff" opacity="0.55"
+        letter-spacing="10">TRADING BOT</text>
 </svg>
