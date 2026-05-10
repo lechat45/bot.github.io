@@ -258,6 +258,56 @@ MEME_STOCKS           = {"AMC", "GME", "HOOD", "DOGE/USD"}
                                 # HOOD : corrélé retail sentiment
                                 # DOGE/USD : crypto meme, drawdowns violents
 
+# ── Feature 1 : Pyramiding (renforcer les gagnants) ──────────────────────────
+PYRAMIDING_SEUIL_PCT   = 3.0    # % gain minimum pour pyramider
+PYRAMIDING_MULT        = 0.30   # Taille du renforcement (30% de la position originale)
+PYRAMIDING_MAX_FOIS    = 1      # Maximum 1 pyramiding par position
+PYRAMIDING_FILE        = DATA_DIR / "pyramiding.json"  # {ticker: nb_fois_pyramide}
+
+# ── Feature 2 : Paires de trading ────────────────────────────────────────────
+PAIRES_TRADING = [
+    ("NVDA", "AMD"),
+    ("TSLA", "RIVN"),
+    ("UBER", "LYFT"),
+    ("BTC/USD", "ETH/USD"),
+    ("SPY", "QQQ"),
+]
+# Seuil de divergence: si l'un monte +2% et l'autre pas → signal
+PAIRES_DIVERGENCE_SEUIL = 2.0
+
+# ── Feature 3 : Saisonnalité ─────────────────────────────────────────────────
+SAISONNALITE = {
+    1:  1.10,   # Janvier: effet janvier +10%
+    2:  1.00,   # Février: neutre
+    3:  1.00,   # Mars: neutre
+    4:  1.05,   # Avril: retour impôts +5%
+    5:  0.95,   # Mai: "Sell in May" -5%
+    6:  0.95,   # Juin: été calme -5%
+    7:  0.95,   # Juillet: été calme -5%
+    8:  0.90,   # Août: vacances, faible volume -10%
+    9:  0.90,   # Septembre: historiquement mauvais -10%
+    10: 0.95,   # Octobre: volatil -5%
+    11: 1.08,   # Novembre: début rallye de Noël +8%
+    12: 1.10,   # Décembre: rallye de Noël +10%
+}
+
+# ── Feature 4 : Blacklist faux signaux ───────────────────────────────────────
+BLACKLIST_FILE         = DATA_DIR / "blacklist_patterns.json"
+BLACKLIST_SEUIL_PERTES = 3      # 3 pertes consécutives → blacklist
+BLACKLIST_DUREE_H      = 48     # Blacklist pendant 48h
+
+# ── Feature 6 : Hedging automatique ──────────────────────────────────────────
+HEDGE_NB_POSITIONS_SEUIL = 6      # Déclenche hedge si >= 6 positions ouvertes
+HEDGE_ALLOC_PCT           = 2.0   # 2% equity pour le hedge
+HEDGE_TICKER_BAISSIER     = "GLD" # Or quand marché BAISSIER
+HEDGE_TICKER_NEUTRE       = "GLD" # Or aussi en marché LATÉRAL
+
+# ── Feature 7 : Détection de krach ───────────────────────────────────────────
+KRACH_SEUIL_PCT      = 3.0    # Chute SPY en 1h pour déclencher mode bunker
+KRACH_PAUSE_H        = 48     # Pause en heures après un krach
+KRACH_VENTE_PCT      = 0.50   # Vendre 50% des positions
+BUNKER_FILE          = DATA_DIR / "bunker_mode.json"  # {actif_jusqu: timestamp}
+
 # ── Mode Crypto Nuit/Weekend ─────────────────────────────────────────────
 # Quand le marché actions est fermé, le bot se concentre sur les cryptos (24/7).
 # Les cryptos reçoivent : barres 30min (plus granulaires), allocation +30%,
@@ -1791,6 +1841,185 @@ class VeilleReddit:
 
 
 # =============================================================================
+# [MODULE 4c-extra] GestionnaireBlacklist — Feature 4: Faux signaux
+# =============================================================================
+
+class GestionnaireBlacklist:
+    """Blackliste temporairement les tickers avec trop de faux signaux."""
+
+    def __init__(self):
+        self.logger = logging.getLogger("Blacklist")
+        self.data: dict = {}   # {ticker: {"pertes_consecutives": N, "blacklist_jusqu": timestamp}}
+        self._charger()
+
+    def _charger(self):
+        try:
+            if BLACKLIST_FILE.exists():
+                with open(BLACKLIST_FILE, encoding="utf-8") as f:
+                    self.data = json.load(f)
+        except Exception:
+            self.data = {}
+
+    def _sauvegarder(self):
+        try:
+            BLACKLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2)
+        except Exception as e:
+            self.logger.warning(f"Blacklist save: {e}")
+
+    def est_blackliste(self, ticker: str) -> bool:
+        """Retourne True si le ticker est actuellement blacklisté."""
+        info = self.data.get(ticker, {})
+        jusqu = info.get("blacklist_jusqu", 0)
+        return time.time() < jusqu
+
+    def enregistrer_resultat(self, ticker: str, pnl: float, discord_fn=None):
+        """Enregistre le résultat d'un trade et blackliste si nécessaire."""
+        if ticker not in self.data:
+            self.data[ticker] = {"pertes_consecutives": 0, "blacklist_jusqu": 0}
+
+        if pnl < 0:
+            self.data[ticker]["pertes_consecutives"] += 1
+            consecutives = self.data[ticker]["pertes_consecutives"]
+            if consecutives >= BLACKLIST_SEUIL_PERTES:
+                expiry = time.time() + BLACKLIST_DUREE_H * 3600
+                self.data[ticker]["blacklist_jusqu"] = expiry
+                msg = (
+                    f"🚫 **BLACKLIST** `{ticker}` — {consecutives} pertes consécutives\n"
+                    f"Trading suspendu pendant {BLACKLIST_DUREE_H}h\n"
+                    f"Pattern répété sans succès détecté 🔍"
+                )
+                self.logger.warning(f"[BLACKLIST] {ticker} — {consecutives} pertes → suspendu 48h")
+                if discord_fn:
+                    discord_fn(msg)
+        else:
+            # Gain → réinitialiser le compteur
+            self.data[ticker]["pertes_consecutives"] = 0
+
+        self._sauvegarder()
+
+    def get_blacklistes(self) -> list:
+        now = time.time()
+        return [t for t, v in self.data.items() if now < v.get("blacklist_jusqu", 0)]
+
+
+# =============================================================================
+# [MODULE 4c-extra2] MeteoEconomique — Feature 9: Météo économique mondiale
+# =============================================================================
+
+class MeteoEconomique:
+    """
+    Surveillance macro: EUR/USD, GLD (or), pétrole (USO).
+    Retourne un signal de risque global pour ajuster l'agressivité du bot.
+    """
+    CACHE_TTL = 1800  # 30 min
+
+    def __init__(self):
+        self.logger = logging.getLogger("Meteo")
+        self._cache = {}
+        self._cache_ts = 0
+
+    def analyser(self, alpaca_client) -> dict:
+        if time.time() - self._cache_ts < self.CACHE_TTL and self._cache:
+            return self._cache
+
+        result = {"signal": "NEUTRE", "score_risque": 50, "details": []}
+        score_risque = 50
+
+        try:
+            # GLD (or) — hausse = peur dans le marché
+            df_gld = alpaca_client.get_barres("GLD")
+            if df_gld is not None and not df_gld.empty and len(df_gld) >= 5:
+                gld_change = (df_gld["close"].iloc[-1] - df_gld["close"].iloc[-5]) / df_gld["close"].iloc[-5] * 100
+                if gld_change > 1.5:
+                    score_risque += 15
+                    result["details"].append(f"Or +{gld_change:.1f}% (signal de peur)")
+                elif gld_change < -1.0:
+                    score_risque -= 10
+                    result["details"].append(f"Or {gld_change:.1f}% (confiance marché)")
+        except Exception as e:
+            self.logger.debug(f"GLD: {e}")
+
+        try:
+            # USO (pétrole) — forte hausse = inflation = mauvais pour tech
+            df_uso = alpaca_client.get_barres("USO")
+            if df_uso is not None and not df_uso.empty and len(df_uso) >= 5:
+                uso_change = (df_uso["close"].iloc[-1] - df_uso["close"].iloc[-5]) / df_uso["close"].iloc[-5] * 100
+                if uso_change > 3.0:
+                    score_risque += 10
+                    result["details"].append(f"Pétrole +{uso_change:.1f}% (pression inflation)")
+                elif uso_change < -3.0:
+                    score_risque -= 5
+                    result["details"].append(f"Pétrole {uso_change:.1f}% (détente économique)")
+        except Exception as e:
+            self.logger.debug(f"USO: {e}")
+
+        # Signal global
+        score_risque = max(0, min(100, score_risque))
+        result["score_risque"] = score_risque
+        if score_risque >= 70:
+            result["signal"] = "RISQUE_ELEVE"
+        elif score_risque <= 35:
+            result["signal"] = "FAVORABLE"
+        else:
+            result["signal"] = "NEUTRE"
+
+        self._cache = result
+        self._cache_ts = time.time()
+        return result
+
+
+# =============================================================================
+# [MODULE 4c-extra3] SuiviInsiders — Feature 10: SEC Form 4
+# =============================================================================
+
+class SuiviInsiders:
+    """
+    Surveille les achats d'initiés via SEC EDGAR (Form 4).
+    Données publiques, aucune clé API requise.
+    """
+    CACHE_TTL = 3600 * 4  # Cache 4h
+    HEADERS = {"User-Agent": "RouteBot/4.1 sacha.pellerin.45@icloud.com"}
+
+    def __init__(self):
+        self.logger = logging.getLogger("Insiders")
+        self._cache = {}
+        self._cache_ts = 0
+
+    def get_achats_recents(self, tickers: list) -> dict:
+        """Retourne {ticker: True/False} si des initiés ont acheté récemment."""
+        if time.time() - self._cache_ts < self.CACHE_TTL and self._cache:
+            return self._cache
+
+        result = {t: False for t in tickers}
+        try:
+            end = datetime.now().strftime("%Y-%m-%d")
+            start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            url = f"https://efts.sec.gov/LATEST/search-index?q=%22Form+4%22&dateRange=custom&startdt={start}&enddt={end}"
+            resp = requests.get(url, headers=self.HEADERS, timeout=8)
+            if resp.status_code == 200:
+                data = resp.json()
+                hits = data.get("hits", {}).get("hits", [])
+                for hit in hits:
+                    entity = hit.get("_source", {}).get("entity_name", "").upper()
+                    for ticker in tickers:
+                        if ticker.upper() in entity or entity in ticker.upper():
+                            result[ticker] = True
+        except Exception as e:
+            self.logger.debug(f"Insiders: {e}")
+
+        # Filtrer: retourner seulement les tickers avec achats confirmés
+        actifs = {t: v for t, v in result.items() if v}
+        if actifs:
+            self.logger.info(f"👔 Achats initiés détectés: {list(actifs.keys())}")
+
+        self._cache = result
+        self._cache_ts = time.time()
+        return result
+
+
+# =============================================================================
 # [MODULE 4d] DetecteurRegime — Régime de marché via SPY/QQQ
 # =============================================================================
 
@@ -2044,6 +2273,42 @@ class NotificateurDiscord:
             f"P&L: {sign}${pnl:.2f} ({sign}{pnl_pct:.2f}%) | "
             f"Pos: {nb_positions} | Achats: {achats} | Ventes: {ventes}"
         )
+
+    def notifier_erreur_ia(self, ticker: str, pnl: float, details_trade: dict,
+                           regime: str, groq_client=None):
+        """Demande à Groq d'analyser un trade perdant et envoie l'explication sur Discord."""
+        if pnl >= 0 or abs(pnl) < 30:  # Seulement pour pertes > 30$
+            return
+        try:
+            prompt = f"""Un trade a perdu de l'argent. Analyse BRIÈVEMENT (3-4 phrases max) pourquoi et ce qu'il fallait éviter.
+
+Ticker: {ticker}
+Perte: ${abs(pnl):.2f}
+RSI à l'achat: {details_trade.get('rsi', '?')}
+Score technique: {details_trade.get('score', '?')}/100
+HMA crossover: {details_trade.get('hma_crossover', '?')}
+Régime marché: {regime}
+Raison de vente: {details_trade.get('raison_vente', '?')}
+
+Réponds en français, de façon directe et actionnable. Format: 1 ligne d'erreur principale + 1 ligne de conseil."""
+
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 150,
+                "temperature": 0.3
+            }
+            resp = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                               headers=headers, json=payload, timeout=10)
+            if resp.status_code == 200:
+                analyse = resp.json()["choices"][0]["message"]["content"].strip()
+                self._envoyer(
+                    f"🧠 **ANALYSE ERREUR** `{ticker}` | Perte: -${abs(pnl):.2f}\n"
+                    f"━━━━━━━━━━━━━━━━━\n{analyse}"
+                )
+        except Exception as e:
+            self.logger.debug(f"IA erreur: {e}")
 
 
 # =============================================================================
@@ -2527,6 +2792,23 @@ class BotRoute:
         self._achats_crypto_cycle = 0  # compteur séparé pour les cryptos
         self._portfolio_heat: float = 0.0
         self._circuit_breaker_actif: bool = False
+        # Feature 1 : Pyramiding
+        self._pyramiding_done: dict = {}
+        # Feature 2 : Paires de trading
+        self._derniere_alerte_paire: dict = {}
+        # Feature 4 : Blacklist
+        self.blacklist = GestionnaireBlacklist()
+        # Feature 6 : Hedge
+        self._dernier_hedge_check: float = 0.0
+        # Feature 7 : Bunker
+        self._weekend_protection_done = None
+        # Feature 9 : Météo économique
+        self.meteo = MeteoEconomique()
+        # Feature 10 : Suivi initiés
+        self.insiders = SuiviInsiders()
+        self._insiders_data: dict = {}
+        # Feature 11 : Journal hebdomadaire
+        self._dernier_journal = None
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         # Migration one-shot JSON → SQLite
         self.persistance.importer_json(self.historique_trades)
@@ -2536,6 +2818,8 @@ class BotRoute:
         self._charger_watchlist()
         # Charge les cooldowns depuis le fichier JSON (persistant entre runs GitHub Actions)
         self._charger_cooldowns()
+        # Charge l'état pyramiding (Feature 1)
+        self._charger_pyramiding()
 
     # ── Helpers protection trading ────────────────────────────────────────
 
@@ -3577,6 +3861,27 @@ class BotRoute:
         base["facteurs_positifs"]  = sent.get("facteurs_positifs", [])
         base["facteurs_negatifs"]  = sent.get("facteurs_negatifs", [])
 
+        # ── 3b. Feature 3 : Ajustement saisonnalité ──────────────────────────
+        mois = datetime.now().month
+        mult_saison = SAISONNALITE.get(mois, 1.0)
+        if mult_saison != 1.0 and tech["signal"] == "BUY":
+            tech["score"] = min(100.0, tech["score"] * mult_saison)
+            base["score_technique"] = tech["score"]
+            if mult_saison != 1.0:
+                base.setdefault("raison", "")
+
+        # ── 3c. Feature 4 : Vérifier blacklist ───────────────────────────────
+        if self.blacklist.est_blackliste(ticker):
+            base["raison"] = f"🚫 Ticker blacklisté — trop de faux signaux récents (48h)"
+            base["action"] = "NEUTRE"
+            return base
+
+        # ── 3d. Feature 10 : Bonus initiés SEC ───────────────────────────────
+        if self._insiders_data.get(ticker, False):
+            tech["score"] = min(100.0, tech["score"] + 5.0)
+            base["score_technique"] = tech["score"]
+            base["raison"] = base.get("raison", "") + " | 👔 Achat initié SEC Form 4"
+
         # ── 4. Décision fusionnée ─────────────────────────────────────────
         dec = self.decision.decider(tech, sent, dans_position,
                                     fear_greed=self._fear_greed_value,
@@ -3586,6 +3891,10 @@ class BotRoute:
             "conviction":     dec["conviction"],
             "raison":         dec["raison"],
         })
+
+        # ── 4b. Feature 3 : Ajouter mention saisonnalité dans la raison ──────
+        if mult_saison != 1.0 and dec.get("action") == "ACHAT":
+            base["raison"] = base.get("raison", "") + f" | Saison×{mult_saison:.2f}"
 
         # ── 5. Exécution ──────────────────────────────────────────────────
         if not executer:
@@ -3731,10 +4040,11 @@ class BotRoute:
             pos = positions.get(ticker) or positions.get(ticker_norm, {})
             if self.alpaca.liquider_position(ticker):
                 base["action_executee"] = "VENTE"
+                pnl_val = round(pos.get("unrealized_pl", 0), 2)
                 trade = {
                     "type": "VENTE", "ticker": ticker,
                     "prix": tech["prix"],
-                    "pnl": round(pos.get("unrealized_pl", 0), 2),
+                    "pnl": pnl_val,
                     "pnl_pct": round(pos.get("unrealized_plpc", 0), 2),
                     "sentiment": sent["score"],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -3744,13 +4054,25 @@ class BotRoute:
                 self._sauvegarder_historique()
                 self.discord.notifier_vente(
                     ticker,
-                    round(pos.get("unrealized_pl", 0), 2),
+                    pnl_val,
                     round(pos.get("unrealized_plpc", 0), 2),
                     dec["raison"]
                 )
                 self.logger.info(
                     f"[VENTE] {ticker} P&L {pos.get('unrealized_plpc',0):.2f}% | {dec['raison'][:60]}"
                 )
+                # Feature 4 : enregistrer résultat dans blacklist
+                self.blacklist.enregistrer_resultat(ticker, pnl_val, self.discord._envoyer)
+                # Feature 5 : IA analyse les erreurs (pertes > 30$)
+                if pnl_val < -30:
+                    details_trade = {
+                        "rsi": tech["indicateurs"].get("rsi"),
+                        "score": dec.get("score_fusionne"),
+                        "hma_crossover": dec.get("croisement_hma"),
+                        "raison_vente": dec.get("raison", ""),
+                    }
+                    regime_str = getattr(self, '_dernier_regime', "?") or "?"
+                    self.discord.notifier_erreur_ia(ticker, pnl_val, details_trade, regime_str)
 
         # ── Raison en langage simple pour le dashboard ────────────────────
         base["raison_simple"] = self._generer_raison_simple(dec, ticker)
@@ -3898,6 +4220,306 @@ class BotRoute:
 
         return lt_actions
 
+    # =========================================================================
+    # Feature 1 : Pyramiding — renforcer les gagnants
+    # =========================================================================
+
+    def _charger_pyramiding(self):
+        try:
+            if PYRAMIDING_FILE.exists():
+                with open(PYRAMIDING_FILE, encoding="utf-8") as f:
+                    self._pyramiding_done = json.load(f)
+        except Exception:
+            self._pyramiding_done = {}
+
+    def _sauvegarder_pyramiding(self):
+        try:
+            PYRAMIDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(PYRAMIDING_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._pyramiding_done, f)
+        except Exception:
+            pass
+
+    def _verifier_pyramiding(self, positions: dict, compte: dict):
+        """Renforce les positions gagnantes de +3% (pyramiding)."""
+        equity = compte.get("equity", 0)
+        for ticker, pos in positions.items():
+            try:
+                plpc = float(pos.get("unrealized_plpc", 0))
+                market_val = float(pos.get("market_value", 0))
+                done = self._pyramiding_done.get(ticker, 0)
+                if plpc >= PYRAMIDING_SEUIL_PCT and done < PYRAMIDING_MAX_FOIS:
+                    montant = round(market_val * PYRAMIDING_MULT, 2)
+                    montant = min(montant, equity * 0.03)  # max 3% equity
+                    if montant >= 50:
+                        self.alpaca.soumettre_ordre(ticker, montant, "buy")
+                        self._pyramiding_done[ticker] = done + 1
+                        self._sauvegarder_pyramiding()
+                        self.discord._envoyer(
+                            f"🔺 **PYRAMIDING** `{ticker}` | +{plpc:.1f}% gain\n"
+                            f"Renforcement ${montant:.0f} (×{PYRAMIDING_MULT*100:.0f}% position)\n"
+                            f"Laisser courir les gagnants 📈"
+                        )
+                        self.logger.info(f"[PYRAMIDING] {ticker} +{plpc:.1f}% → renforcement ${montant:.0f}")
+            except Exception as e:
+                self.logger.debug(f"Pyramiding {ticker}: {e}")
+
+    # =========================================================================
+    # Feature 2 : Paires de trading — détection divergences
+    # =========================================================================
+
+    def _analyser_paires(self, decisions: dict) -> list:
+        """Détecte les divergences dans les paires corrélées."""
+        signaux = []
+        for ticker_a, ticker_b in PAIRES_TRADING:
+            dec_a = decisions.get(ticker_a, {})
+            dec_b = decisions.get(ticker_b, {})
+            score_a = dec_a.get("score_technique", 50)
+            score_b = dec_b.get("score_technique", 50)
+            diff = abs(score_a - score_b)
+            if diff >= 15:  # divergence significative
+                fort = ticker_a if score_a > score_b else ticker_b
+                faible = ticker_b if score_a > score_b else ticker_a
+                signaux.append({
+                    "paire": f"{ticker_a}/{ticker_b}",
+                    "fort": fort,
+                    "faible": faible,
+                    "divergence": round(diff, 1),
+                    "signal": f"📊 {fort} fort (score {max(score_a,score_b):.0f}) vs {faible} faible (score {min(score_a,score_b):.0f}) — divergence paire"
+                })
+                # Alerte Discord si divergence > 20 pts, max 1x/heure par paire
+                if diff > 20:
+                    paire_key = f"{ticker_a}/{ticker_b}"
+                    derniere = self._derniere_alerte_paire.get(paire_key, 0)
+                    if time.time() - derniere > 3600:
+                        self._derniere_alerte_paire[paire_key] = time.time()
+                        self.discord._envoyer(
+                            f"📊 **DIVERGENCE PAIRE** `{ticker_a}/{ticker_b}`\n"
+                            f"Fort: `{fort}` (score {max(score_a,score_b):.0f}) | Faible: `{faible}` (score {min(score_a,score_b):.0f})\n"
+                            f"Divergence: {diff:.0f} pts 📈"
+                        )
+        return signaux
+
+    # =========================================================================
+    # Feature 6 : Hedging automatique — GLD
+    # =========================================================================
+
+    def _verifier_hedge(self, positions: dict, compte: dict, regime: str):
+        """Achète automatiquement GLD si trop de positions + marché incertain."""
+        try:
+            nb_pos = len(positions)
+            equity = compte.get("equity", 0)
+            has_hedge = "GLD" in positions
+
+            if nb_pos >= HEDGE_NB_POSITIONS_SEUIL and regime in ("BAISSIER", "LATÉRAL") and not has_hedge:
+                montant = round(equity * HEDGE_ALLOC_PCT / 100, 2)
+                montant = max(50, min(montant, 500))
+                self.alpaca.soumettre_ordre("GLD", montant, "buy")
+                self.discord._envoyer(
+                    f"🛡️ **HEDGE AUTO** — Achat GLD (or) ${montant:.0f}\n"
+                    f"Raison: {nb_pos} positions ouvertes + marché {regime}\n"
+                    f"Protection automatique du portefeuille activée"
+                )
+                self.logger.info(f"[HEDGE] GLD ${montant:.0f} — {nb_pos} positions + {regime}")
+            elif has_hedge and regime == "HAUSSIER" and nb_pos < 4:
+                # Marché redevenu bon → liquider le hedge
+                self.alpaca.liquider_position("GLD")
+                self.discord._envoyer(f"✅ **HEDGE** GLD vendu — marché {regime}, risque réduit")
+        except Exception as e:
+            self.logger.debug(f"Hedge: {e}")
+
+    # =========================================================================
+    # Feature 7 : Détection de krach — mode bunker
+    # =========================================================================
+
+    def _verifier_mode_bunker(self, positions: dict) -> bool:
+        """Vérifie si mode bunker actif. Retourne True si trading bloqué."""
+        try:
+            # Vérifier si bunker déjà actif
+            if BUNKER_FILE.exists():
+                with open(BUNKER_FILE) as f:
+                    data = json.load(f)
+                if time.time() < data.get("actif_jusqu", 0):
+                    heures_restantes = (data["actif_jusqu"] - time.time()) / 3600
+                    self.logger.info(f"🏰 MODE BUNKER actif — encore {heures_restantes:.1f}h")
+                    return True
+
+            # Vérifier chute SPY sur la dernière heure
+            df_spy = self.alpaca.get_barres("SPY")
+            if df_spy is None or df_spy.empty or len(df_spy) < 2:
+                return False
+
+            prix_actuel = float(df_spy["close"].iloc[-1])
+            prix_il_y_a_1h = float(df_spy["close"].iloc[-2])
+            chute_pct = (prix_actuel - prix_il_y_a_1h) / prix_il_y_a_1h * 100
+
+            if chute_pct <= -KRACH_SEUIL_PCT:
+                # KRACH DÉTECTÉ
+                self.logger.error(f"🚨 KRACH DÉTECTÉ — SPY {chute_pct:.2f}% en 1h → MODE BUNKER")
+
+                # Sauvegarder bunker
+                expiry = time.time() + KRACH_PAUSE_H * 3600
+                with open(BUNKER_FILE, "w") as f:
+                    json.dump({"actif_jusqu": expiry, "declanche": datetime.now().isoformat(), "chute_spy": chute_pct}, f)
+
+                # Vendre 50% des positions (les plus risquées en premier)
+                tickers_risques = [t for t in positions if t in MEME_STOCKS or "/" in t]
+                tickers_normaux = [t for t in positions if t not in tickers_risques]
+                tickers_a_vendre = tickers_risques + tickers_normaux
+                nb_a_vendre = max(1, int(len(tickers_a_vendre) * KRACH_VENTE_PCT))
+
+                vendus = []
+                for ticker in tickers_a_vendre[:nb_a_vendre]:
+                    try:
+                        self.alpaca.liquider_position(ticker)
+                        vendus.append(ticker)
+                    except Exception as e:
+                        self.logger.error(f"Vente bunker {ticker}: {e}")
+
+                self.discord._envoyer(
+                    f"🚨 **MODE BUNKER ACTIVÉ** 🏰\n"
+                    f"SPY a chuté de {abs(chute_pct):.1f}% en 1h\n"
+                    f"Positions vendues ({len(vendus)}/{len(tickers_a_vendre)}) : {', '.join(vendus)}\n"
+                    f"Trading suspendu pendant {KRACH_PAUSE_H}h\n"
+                    f"📅 Reprise: {datetime.fromtimestamp(expiry).strftime('%d/%m à %Hh%M')}"
+                )
+                return True
+            return False
+        except Exception as e:
+            self.logger.warning(f"Mode bunker: {e}")
+            return False
+
+    # =========================================================================
+    # Feature 8 : Protection weekend — vendredi 15h30
+    # =========================================================================
+
+    def _protection_weekend(self, positions: dict):
+        """Vendredi 15h30-15h45 : vendre les positions risquées avant le weekend."""
+        try:
+            now_et = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-4)))
+            # Vendredi entre 15h30 et 15h45
+            if now_et.weekday() != 4 or not (now_et.hour == 15 and 30 <= now_et.minute <= 45):
+                return
+
+            # Éviter de répéter plusieurs fois dans les 15 min
+            key = now_et.strftime("%Y-%m-%d")
+            if getattr(self, '_weekend_protection_done', None) == key:
+                return
+            self._weekend_protection_done = key
+
+            tickers_risques = []
+            for ticker, pos in positions.items():
+                plpc = float(pos.get("unrealized_plpc", 0))
+                est_risque = (
+                    ticker in MEME_STOCKS or
+                    "/" in ticker or  # crypto
+                    ticker in {"RIVN", "LCID", "NIO", "SPCE", "NKLA"}
+                )
+                if est_risque and plpc < -0.5:  # En perte + risqué → vendre
+                    tickers_risques.append((ticker, plpc))
+
+            vendus = []
+            for ticker, plpc in tickers_risques:
+                try:
+                    self.alpaca.liquider_position(ticker)
+                    vendus.append(f"{ticker} ({plpc:+.1f}%)")
+                except Exception as e:
+                    self.logger.error(f"Weekend protection {ticker}: {e}")
+
+            if vendus:
+                self.discord._envoyer(
+                    f"🌙 **PROTECTION WEEKEND** — Vendredi 15h30\n"
+                    f"Positions risquées vendues : {', '.join(vendus)}\n"
+                    f"Raison: weekend = impossible de réagir aux mauvaises nouvelles"
+                )
+                self.logger.info(f"[WEEKEND] Vendus: {vendus}")
+        except Exception as e:
+            self.logger.debug(f"Protection weekend: {e}")
+
+    # =========================================================================
+    # Feature 11 : Journal hebdomadaire Discord
+    # =========================================================================
+
+    def _journal_hebdomadaire(self):
+        """Envoie un journal de trading hebdomadaire sur Discord chaque lundi matin."""
+        try:
+            now_et = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-4)))
+            # Lundi entre 9h00 et 9h10
+            if now_et.weekday() != 0 or now_et.hour != 9 or now_et.minute > 10:
+                return
+            key = now_et.strftime("%Y-W%W")
+            if getattr(self, '_dernier_journal', None) == key:
+                return
+            self._dernier_journal = key
+
+            # Charger les trades de la semaine passée
+            trades_semaine = []
+            if HISTORIQUE_FILE.exists():
+                with open(HISTORIQUE_FILE, encoding="utf-8") as f:
+                    tous = json.load(f)
+                cutoff = (now_et - timedelta(days=7)).timestamp() * 1000
+                for t in tous:
+                    ts = t.get("timestamp", "")
+                    try:
+                        t_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        if t_dt.timestamp() * 1000 > cutoff and t.get("type") in ("VENTE", "VENTE_AUTO"):
+                            trades_semaine.append(t)
+                    except Exception:
+                        pass
+
+            if not trades_semaine:
+                self.discord._envoyer("📔 **Journal hebdo** — Aucun trade fermé cette semaine.")
+                return
+
+            # Stats simples
+            pnls = [float(t.get("pnl", 0)) for t in trades_semaine]
+            total_pnl = sum(pnls)
+            gagnants = [p for p in pnls if p > 0]
+            perdants = [p for p in pnls if p < 0]
+
+            # Appel Groq pour l'analyse narrative
+            resume_trades = "\n".join([
+                f"- {t.get('ticker','?')}: {float(t.get('pnl',0)):+.2f}$ ({t.get('raison','?')[:40]})"
+                for t in trades_semaine[:15]
+            ])
+
+            analyse = "Analyse IA indisponible."
+            if GROQ_API_KEY:
+                prompt = f"""Analyse cette semaine de trading en 4-5 phrases en français simple.
+
+Trades fermés:
+{resume_trades}
+
+PnL total: {total_pnl:+.2f}$
+Trades gagnants: {len(gagnants)} | Perdants: {len(perdants)}
+
+Donne: 1) Ce qui a marché 2) Ce qui a échoué 3) Une recommandation pour la semaine prochaine.
+Sois direct, pratique, sans jargon technique."""
+
+                try:
+                    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+                    payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}],
+                              "max_tokens": 250, "temperature": 0.4}
+                    resp = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                                       headers=headers, json=payload, timeout=15)
+                    if resp.status_code == 200:
+                        analyse = resp.json()["choices"][0]["message"]["content"].strip()
+                except Exception:
+                    analyse = "Analyse IA indisponible."
+
+            emoji_pnl = "📈" if total_pnl >= 0 else "📉"
+            self.discord._envoyer(
+                f"📔 **JOURNAL HEBDOMADAIRE** — Semaine {now_et.strftime('%d/%m/%Y')}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{emoji_pnl} PnL semaine: **{total_pnl:+.2f}$**\n"
+                f"✅ Gagnants: {len(gagnants)} | ❌ Perdants: {len(perdants)}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🧠 **Analyse IA:**\n{analyse}"
+            )
+            self.logger.info(f"[JOURNAL] Semaine envoyée sur Discord — PnL: {total_pnl:+.2f}$")
+        except Exception as e:
+            self.logger.warning(f"Journal hebdo: {e}")
+
     def run_cycle(self) -> dict:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
@@ -3945,6 +4567,12 @@ class BotRoute:
             return {"meta": {"cycle": self.cycle, "erreur": str(e)},
                     "portefeuille": {}, "decisions_cycle": []}
 
+        # Feature 7 : Mode Bunker — vérifier EN DÉBUT avant tout trading
+        if self._verifier_mode_bunker(positions):
+            return {"meta": {"cycle": self.cycle, "timestamp": datetime.now(timezone.utc).isoformat(),
+                             "mode_bunker": True, "marche_ouvert": marche_ouvert},
+                    "portefeuille": {"equity": compte.get("equity", 0)}, "decisions_cycle": []}
+
         if marche_ouvert:
             self._auditer_positions(positions)
 
@@ -3971,6 +4599,11 @@ class BotRoute:
                 f"{regime_marche.get('description', '')}"
             )
         self._dernier_regime = regime_marche.get('regime')
+
+        # Feature 9 : Météo économique mondiale
+        meteo = self.meteo.analyser(self.alpaca)
+        if meteo["signal"] == "RISQUE_ELEVE":
+            self.logger.info(f"🌩️ Météo éco: RISQUE ÉLEVÉ ({meteo.get('details', [])})")
 
         self.pause_drawdown = self.risque.verifier_drawdown(compte["equity"])
         # Alerte Discord préventive à 3% de drawdown (avant la pause à 5%)
@@ -4045,6 +4678,40 @@ class BotRoute:
 
         # Mémoriser les scores pour la prochaine sélection d'actions nuit
         self._dernieres_decisions = {d["ticker"]: d for d in decisions}
+
+        # Feature 10 : Suivi initiés SEC — une fois par cycle
+        try:
+            self._insiders_data = self.insiders.get_achats_recents(ACTIFS_ACTIONS[:15])
+        except Exception:
+            self._insiders_data = {}
+
+        # Feature 2 : Analyser les paires de trading
+        decisions_dict = {d["ticker"]: d for d in decisions}
+        paires_divergence = self._analyser_paires(decisions_dict)
+
+        # Feature 1 : Pyramiding — seulement si pas en pause et pas circuit breaker
+        if not self._circuit_breaker_actif and not self.pause_drawdown:
+            try:
+                positions_fresh = self.alpaca.get_positions()
+                # Nettoyer _pyramiding_done des tickers qui ne sont plus en position
+                self._pyramiding_done = {
+                    t: v for t, v in self._pyramiding_done.items()
+                    if t in positions_fresh
+                }
+                self._verifier_pyramiding(positions_fresh, compte)
+            except Exception as e:
+                self.logger.debug(f"Pyramiding cycle: {e}")
+
+        # Feature 6 : Hedge automatique — une fois par heure
+        if time.time() - self._dernier_hedge_check > 3600:
+            self._dernier_hedge_check = time.time()
+            self._verifier_hedge(positions, compte, regime_marche.get("regime", "LATÉRAL"))
+
+        # Feature 8 : Protection weekend
+        self._protection_weekend(positions)
+
+        # Feature 11 : Journal hebdomadaire
+        self._journal_hebdomadaire()
 
         # ── Portefeuille Long Terme — Sacha Pro (expérimental) ───────────────
         lt_actions = []
@@ -4243,6 +4910,16 @@ class BotRoute:
                                 if self.portefeuille_lt else {"nb_positions": 0, "positions": {}}),
             "lt_actions_cycle": lt_actions,
             "metriques": metriques,
+            # Feature 2 : Paires de trading
+            "paires_divergence": paires_divergence,
+            # Feature 3 : Saisonnalité
+            "saisonnalite_mult": SAISONNALITE.get(datetime.now().month, 1.0),
+            # Feature 4 : Blacklist
+            "blacklist_actifs": self.blacklist.get_blacklistes(),
+            # Feature 9 : Météo économique
+            "meteo_economique": meteo,
+            # Feature 10 : Insiders
+            "insiders_actifs": [t for t, v in self._insiders_data.items() if v],
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
                 "take_profit_pct":    TAKE_PROFIT_PCT * 100,

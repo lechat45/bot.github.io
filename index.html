@@ -1016,6 +1016,7 @@
     </div>
     <div class="chart-body">
       <svg id="eq-svg" viewBox="0 0 900 240" width="100%" height="240" style="overflow:visible;display:block"></svg>
+      <div id="spy-comparison"></div>
     </div>
   </div>
 
@@ -1437,6 +1438,20 @@
 
       </section>
 
+      <!-- ─── STRATÉGIE : Signaux Macro ─── -->
+      <section class="two-col" style="margin-top:20px">
+        <div class="card" id="macro-signals-section">
+          <div class="phd">
+            <span class="phd-l"><span class="phd-icon">📡</span> SIGNAUX MACRO</span>
+          </div>
+          <div class="card-body">
+            <div id="macro-signals-content">
+              <span style="color:var(--dim);font:400 11px 'JetBrains Mono',monospace">Chargement…</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
   </div><!-- /tab-strategie -->
 
   <footer class="footer" id="footer">
@@ -1684,6 +1699,8 @@ function render(data) {
   renderPortefeuilleLT(data.portefeuille_lt, data.lt_actions_cycle, data.config);
   renderEtfSection(data.decisions_cycle);
   renderModeTemporel(data.meta);
+  renderComparaisonSPY(data);
+  renderMacroSignals(data);
 
   $('footer').innerHTML =
     `ROUTE<span class="accm">/</span>v4 · <span class="acc">alpaca-trade-api</span> + <span class="acc">pandas-ta</span> · <span class="accm">${meta.sentiment_engine || 'Groq Cloud'}</span> · Cycle <span class="acc">#${meta.cycle??0}</span> · ${new Date().toLocaleString('fr-FR')}`;
@@ -1789,12 +1806,17 @@ function renderPositions(positions) {
       : plpc < 0
       ? `<span style="font:600 10px 'JetBrains Mono',monospace;color:var(--red)">⚠️ En perte</span>`
       : '';
+    // Badge pyramiding: affiché si pyramiding_done OU si P&L > 3%
+    const hasPyramid = p.pyramiding_done || plpc > 3;
+    const pyramidBadge = hasPyramid
+      ? `<span title="${p.pyramiding_done ? 'Position renforcée (pyramiding actif)' : 'Fort potentiel pyramiding'}" style="display:inline-flex;align-items:center;gap:3px;background:rgba(184,255,0,0.12);border:1px solid rgba(184,255,0,0.35);border-radius:8px;padding:1px 7px;font:700 9px 'JetBrains Mono',monospace;color:var(--acid);margin-left:4px;letter-spacing:.5px">🔺 ${p.pyramiding_done ? 'PYRAMIDÉ' : 'PYRAMIDING'}</span>`
+      : '';
     // Progress bar vers take-profit (+4.5%)
     const tpTarget = 4.5;
     const tpPct   = plpc >= 0 ? Math.min(100, (plpc / tpTarget) * 100) : 0;
     const tpBar   = `<div style="height:3px;background:var(--raised);border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${tpPct.toFixed(1)}%;background:var(--grn);border-radius:2px;transition:width .6s"></div></div>`;
     return `<tr>
-      <td class="sym">${esc(p.ticker)}</td>
+      <td class="sym">${esc(p.ticker)}${pyramidBadge}</td>
       <td class="neu">${(p.qty??0).toFixed(4)}</td>
       <td class="neu">${fU(p.avg_entry_price??0)}</td>
       <td class="${plpc>=0?'bull':'bear'}">${dir} ${fU(p.current_price??0)}</td>
@@ -2962,6 +2984,115 @@ function switchTab(name) {
   const saved = localStorage.getItem('activeTab') || 'live';
   setTimeout(() => switchTab(saved), 0);
 })();
+
+/* ── Comparaison S&P500 sous le graphique equity ──────────── */
+function renderComparaisonSPY(data) {
+  const el = document.getElementById('spy-comparison');
+  if (!el) return;
+
+  const pf = data?.portefeuille || {};
+  const equity = pf.equity || 0;
+  const capitalInit = pf.capital_initial || 100000;
+  const botPnlPct = capitalInit > 0 ? ((equity - capitalInit) / capitalInit * 100) : 0;
+
+  // SPY: utiliser decisions_cycle si SPY est suivi
+  const decs = data?.decisions_cycle || [];
+  const spyDec = decs.find(d => d.ticker === 'SPY') || data?.decisions?.SPY || null;
+  const spyScore = spyDec?.score_fusionne ?? spyDec?.score_technique ?? null;
+
+  el.innerHTML = `
+    <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:8px;padding:8px 4px 4px">
+      <div>
+        <span style="font:500 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px">TON BOT</span>
+        <div style="font:700 20px 'Rajdhani',sans-serif;color:${botPnlPct>=0?'var(--grn)':'var(--red)'}">${botPnlPct>=0?'+':''}${botPnlPct.toFixed(2)}%</div>
+      </div>
+      ${spyScore !== null ? `
+      <div style="width:1px;height:32px;background:rgba(255,255,255,0.1)"></div>
+      <div>
+        <span style="font:500 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px">S&amp;P500 (SPY)</span>
+        <div style="font:700 20px 'Rajdhani',sans-serif;color:rgba(150,180,220,0.9)">
+          ${spyDec?.action === 'ACHAT' ? '📈' : spyDec?.action === 'VENTE' ? '📉' : '➡️'} Signal ${spyDec?.action || 'NEUTRE'}
+        </div>
+        <div style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim)">Score SPY: ${spyScore}/100</div>
+      </div>` : ''}
+      <div style="width:1px;height:32px;background:rgba(255,255,255,0.1)"></div>
+      <div>
+        <span style="font:500 11px 'JetBrains Mono',monospace;color:var(--dim);letter-spacing:1px">OBJECTIF</span>
+        <div style="font:700 16px 'Rajdhani',sans-serif;color:var(--cyn)">Battre le marché 🏆</div>
+        <div style="font:400 10px 'JetBrains Mono',monospace;color:${botPnlPct > 0 ? 'var(--grn)' : 'var(--dim)'}">
+          ${botPnlPct > 0 ? '✅ Bot en profit' : botPnlPct < -2 ? '⚠️ Sous-performance' : '➡️ En cours...'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ── Signaux Macro (météo éco, saisonnalité, insiders, etc.) ─ */
+function renderMacroSignals(data) {
+  const el = document.getElementById('macro-signals-content');
+  if (!el) return;
+
+  const meteo    = data?.meteo_economique    || {};
+  const saison   = data?.saisonnalite_mult   ?? 1.0;
+  const insiders = data?.insiders_actifs     || [];
+  const blacklist= data?.blacklist_actifs    || [];
+  const paires   = data?.paires_divergence   || [];
+
+  const meteoColor = meteo.signal === 'RISQUE_ELEVE' ? 'var(--red)'
+                   : meteo.signal === 'FAVORABLE'    ? 'var(--grn)'
+                   : 'var(--amb)';
+
+  const moisNoms = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const moisActuel = new Date().getMonth() + 1;
+  const saisonPct = ((saison - 1) * 100).toFixed(0);
+
+  // Si aucune donnée macro disponible, afficher un message neutre
+  const hasData = meteo.signal || insiders.length || blacklist.length || paires.length || saison !== 1.0;
+  if (!hasData) {
+    el.innerHTML = `<span style="color:var(--dim);font:400 11px 'JetBrains Mono',monospace">En attente des données macro du bot…</span>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;gap:12px">
+      <!-- Météo économique -->
+      <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid ${meteoColor}">
+        <div style="font:600 12px 'Rajdhani',sans-serif;color:${meteoColor};letter-spacing:1px">
+          🌡️ MÉTÉO ÉCONOMIQUE: ${meteo.signal || 'NEUTRE'}
+        </div>
+        ${(meteo.details||[]).map(d => `<div style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim);margin-top:2px">• ${esc(String(d))}</div>`).join('')}
+      </div>
+
+      <!-- Saisonnalité -->
+      <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px">
+        <div style="font:600 12px 'Rajdhani',sans-serif;color:var(--cyn);letter-spacing:1px">
+          📅 SAISONNALITÉ ${moisNoms[moisActuel]}: ${saisonPct > 0 ? '+' : ''}${saisonPct}%
+        </div>
+        <div style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim);margin-top:2px">
+          ${saison > 1 ? 'Période historiquement favorable 📈' : saison < 1 ? 'Période historiquement faible 📉' : 'Période neutre ➡️'}
+        </div>
+      </div>
+
+      ${insiders.length > 0 ? `
+      <div style="padding:10px;background:rgba(0,255,136,0.05);border-radius:8px;border-left:3px solid var(--grn)">
+        <div style="font:600 12px 'Rajdhani',sans-serif;color:var(--grn);letter-spacing:1px">👔 ACHATS INITIÉS (SEC)</div>
+        <div style="margin-top:4px">${insiders.map(t => `<span style="background:rgba(0,255,136,0.15);padding:2px 8px;border-radius:12px;font:600 11px 'JetBrains Mono',monospace;color:var(--grn);margin:2px;display:inline-block">${esc(String(t))}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${blacklist.length > 0 ? `
+      <div style="padding:10px;background:rgba(255,45,120,0.05);border-radius:8px;border-left:3px solid var(--mag)">
+        <div style="font:600 12px 'Rajdhani',sans-serif;color:var(--mag);letter-spacing:1px">🚫 BLACKLIST FAUX SIGNAUX</div>
+        <div style="margin-top:4px">${blacklist.map(t => `<span style="background:rgba(255,45,120,0.15);padding:2px 8px;border-radius:12px;font:600 11px 'JetBrains Mono',monospace;color:var(--mag);margin:2px;display:inline-block">${esc(String(t))}</span>`).join('')}</div>
+      </div>` : ''}
+
+      ${paires.length > 0 ? `
+      <div style="padding:10px;background:rgba(0,200,255,0.05);border-radius:8px;border-left:3px solid var(--cyn)">
+        <div style="font:600 12px 'Rajdhani',sans-serif;color:var(--cyn);letter-spacing:1px">📊 DIVERGENCES PAIRES</div>
+        ${paires.map(p => `<div style="font:400 11px 'JetBrains Mono',monospace;color:var(--dim);margin-top:4px">• ${esc(String(p.signal || p.paire || p))}</div>`).join('')}
+      </div>` : ''}
+    </div>
+  `;
+}
 
 /* ── Earnings Blackout + Fondamentaux ─────────────────────── */
 function renderEarnings(decisions) {
