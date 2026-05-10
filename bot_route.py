@@ -192,13 +192,34 @@ ACTIFS_ACTIONS = [
     "SPY", "QQQ", "KO",  "DAL", "BA",
 ]
 
-ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD", "SOL/USD"]   # Format Alpaca crypto
+ACTIFS_CRYPTO = ["BTC/USD", "ETH/USD", "SOL/USD"]   # Format Alpaca crypto (toujours actifs)
+
+# ── Crypto étendue pour mode nuit/weekend (50% de l'analyse) ─────────────
+# Ces paires sont disponibles sur Alpaca Paper Trading et tradent 24h/24.
+# Quand le marché actions est fermé, le bot analyse autant de cryptos que d'actions.
+ACTIFS_CRYPTO_NUIT = [
+    "BTC/USD",   # Bitcoin          — liquidité maximale
+    "ETH/USD",   # Ethereum         — DeFi / smart contracts
+    "SOL/USD",   # Solana           — haute vitesse, volume fort
+    "DOGE/USD",  # Dogecoin         — très volatile, bonnes opportunités
+    "AVAX/USD",  # Avalanche        — concurrent ETH
+    "LINK/USD",  # Chainlink        — oracle, corrélé DeFi
+    "LTC/USD",   # Litecoin         — stable, fort volume
+    "BCH/USD",   # Bitcoin Cash     — corrélé BTC
+    "XRP/USD",   # Ripple           — paiements internationaux
+    "UNI/USD",   # Uniswap          — DeFi majeur
+]
+# ACTIFS_CRYPTO_NUIT doit avoir le même nombre que d'actions scannées la nuit
+# → 10 cryptos + 10 actions prioritaires = 20 tickers (50/50)
+NB_ACTIONS_NUIT = len(ACTIFS_CRYPTO_NUIT)   # 10 actions top-score choisies dynamiquement
 
 ACTIFS_TOUS = ACTIFS_ACTIONS + ACTIFS_CRYPTO
 
 SECTEURS = {
     "TECH":    ["TSLA","NVDA","AMD","AMZN","NFLX","META","AAPL","MSFT","GOOGL","INTC"],
-    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD","SOL/USD"],
+    "CRYPTO":  ["COIN","HOOD","BTC/USD","ETH/USD","SOL/USD",
+                "DOGE/USD","AVAX/USD","LINK/USD","LTC/USD","BCH/USD",
+                "XRP/USD","UNI/USD"],
     "FINTECH": ["SOFI","PLTR"],
     "EV":      ["RIVN","LCID","NIO"],
     "MOBILITY":["UBER","LYFT"],
@@ -234,7 +255,9 @@ CRYPTO_NUIT_SEUIL_BUY  = 52     # Seuil score plus bas la nuit (marché moins ac
 GROUPES_CORRELES = [
     {"NVDA", "AMD"},
     {"RIVN", "LCID", "NIO"},
-    {"BTC/USD", "ETH/USD", "COIN"},
+    {"BTC/USD", "ETH/USD", "COIN"},          # Bitcoin-liés
+    {"BTC/USD", "BCH/USD", "LTC/USD"},       # Forks Bitcoin
+    {"ETH/USD", "AVAX/USD", "SOL/USD", "UNI/USD", "LINK/USD"},  # Ethereum-liés / L1
     {"UBER", "LYFT"},
     {"GME", "AMC"},
 ]
@@ -2423,6 +2446,7 @@ class BotRoute:
         self.yahoo           = YahooFinanceClient()
         self.strategie_sacha = StrategieSachaPro()
         self.portefeuille_lt = PortefeuilleLongTerme() if LT_ACTIF else None
+        self._dernieres_decisions: dict = {}   # scores du cycle précédent → sélection nuit
         self._fear_greed_value: int  = 50
         self._mins_depuis_open: float = 999.0
         self._mins_avant_close: float = 999.0
@@ -3696,7 +3720,11 @@ class BotRoute:
         # Données QQQ pour détection régime
         self.df_qqq = self.alpaca.get_barres("QQQ")
         # ── Pré-chargement parallèle des barres (8 threads, Groq reste séquentiel) ──
-        self._prefetch_barres_parallele(ACTIFS_TOUS)
+        actifs_prefetch = (
+            list(dict.fromkeys(ACTIFS_CRYPTO_NUIT + ACTIFS_TOUS))
+            if not marche_ouvert else ACTIFS_TOUS
+        )
+        self._prefetch_barres_parallele(actifs_prefetch)
         # Régime de marché
         regime_marche = self.regime_det.detecter(self.df_spy, self.df_qqq)
 
@@ -3732,12 +3760,33 @@ class BotRoute:
         executer_crypto  = not circuit_ouvert   # Crypto s'exécute TOUJOURS (24/7)
         mode_crypto_nuit = not marche_ouvert    # True = marché fermé → focus crypto
 
+        # ── Construction de la liste de tickers à analyser ce cycle ─────────
+        if mode_crypto_nuit:
+            # Marché fermé → 50% crypto / 50% actions prioritaires
+            # Sélectionner les NB_ACTIONS_NUIT meilleures actions par score précédent
+            dernieres_decisions = getattr(self, '_dernieres_decisions', {})
+            actions_scorees = sorted(
+                ACTIFS_ACTIONS,
+                key=lambda t: dernieres_decisions.get(t, {}).get("score_technique", 50),
+                reverse=True
+            )
+            # Actions à scanner cette nuit : top NB_ACTIONS_NUIT + positions ouvertes
+            actions_ouvertes = [t for t in positions if "/" not in t]
+            actions_nuit = list(dict.fromkeys(
+                actions_ouvertes + actions_scorees[:NB_ACTIONS_NUIT]
+            ))[:NB_ACTIONS_NUIT]
+
+            # Ordre : TOUTES les cryptos étendues EN PREMIER, puis les actions sélectionnées
+            tickers_ordonnes = ACTIFS_CRYPTO_NUIT + actions_nuit
+            self.logger.info(
+                f"🌙 Mode nuit — {len(ACTIFS_CRYPTO_NUIT)} cryptos + "
+                f"{len(actions_nuit)} actions = {len(tickers_ordonnes)} tickers (50/50)"
+            )
+        else:
+            # Marché ouvert → ordre normal (actions + crypto)
+            tickers_ordonnes = ACTIFS_TOUS
+
         decisions = []
-        # Ordre d'analyse : crypto en premier si marché fermé (priorité)
-        tickers_ordonnes = (
-            ACTIFS_CRYPTO + ACTIFS_ACTIONS if mode_crypto_nuit
-            else ACTIFS_TOUS
-        )
         for ticker in tickers_ordonnes:
             time.sleep(0.02)
             is_crypto = "/" in ticker
@@ -3749,6 +3798,9 @@ class BotRoute:
                 mode_crypto_nuit=(mode_crypto_nuit and is_crypto),
             )
             decisions.append(d)
+
+        # Mémoriser les scores pour la prochaine sélection d'actions nuit
+        self._dernieres_decisions = {d["ticker"]: d for d in decisions}
 
         # ── Portefeuille Long Terme — Sacha Pro (expérimental) ───────────────
         lt_actions = []
