@@ -595,14 +595,34 @@ class AlpacaClientV2:
                 else:
                     raise
 
-    def liquider_position(self, ticker: str) -> bool:
-        """Liquide intégralement la position via api.close_position(). Retry 2×."""
+    # Codes d'erreur spéciaux retournés par liquider_position
+    LIQUIDATION_OK        = True
+    LIQUIDATION_ECHEC     = False
+    LIQUIDATION_PDT       = "PDT"     # Pattern Day Trader — ne pas retenter aujourd'hui
+
+    def liquider_position(self, ticker: str):
+        """
+        Liquide intégralement la position via api.close_position(). Retry 2×.
+
+        Retourne :
+          True        → succès
+          False       → échec générique (retenter plus tard)
+          "PDT"       → Pattern Day Trader bloqué — ne PAS retenter avant demain
+        """
         sym = ticker.replace("/", "")
         for tentative in range(3):
             try:
                 self.api.close_position(sym)
                 return True
             except Exception as e:
+                err_msg = str(e).lower()
+                # PDT : Pattern Day Trader — erreur permanente pour la journée
+                if "day trade" in err_msg or "pdt" in err_msg:
+                    self.logger.warning(
+                        f"⚠️ PDT {ticker} — jour de trade bloqué (equity < $25k hier). "
+                        f"Vente reportée à demain."
+                    )
+                    return self.LIQUIDATION_PDT
                 if tentative < 2:
                     self.logger.warning(f"Liquidation {ticker} tentative {tentative+1}/3: {e}")
                     time.sleep(2 ** tentative)
@@ -3941,8 +3961,28 @@ class BotRoute:
                 continue
 
             if raison:
-                ok = self.alpaca.liquider_position(ticker)
-                if ok:
+                resultat = self.alpaca.liquider_position(ticker)
+
+                if resultat == self.alpaca.LIQUIDATION_PDT:
+                    # ── PDT bloqué : cooldown jusqu'à l'ouverture du marché demain ──
+                    # ~23h pour s'assurer qu'on réessaie le lendemain matin
+                    self._cooldown[ticker] = time.time() + 82_800   # 23 heures
+                    self._sauvegarder_cooldowns()
+                    self.logger.warning(
+                        f"[PDT] {ticker} — vente bloquée (Pattern Day Trader). "
+                        f"Réessai demain à l'ouverture. ({raison})"
+                    )
+                    # Notifier Discord une seule fois
+                    try:
+                        self.discord._envoyer(
+                            f"⚠️ **PDT BLOQUÉ** — `{ticker}`\n"
+                            f"Vente {raison} impossible aujourd'hui (equity < $25k hier).\n"
+                            f"La position sera vendue à l'ouverture du marché demain."
+                        )
+                    except Exception:
+                        pass
+
+                elif resultat is True:
                     pnl = round(pos.get("unrealized_pl", 0), 2)
                     trade = {
                         "type": "VENTE_AUTO", "ticker": ticker,
@@ -3963,9 +4003,9 @@ class BotRoute:
                     except Exception:
                         pass
                     # Notification Discord
-                    emoji = "🛑" if "STOP" in raison else "✅"
                     self.discord.notifier_vente(ticker, pnl, plpc, raison)
                     self.logger.info(f"[AUTO] {ticker} — {raison} | PnL: {pnl:+.2f}$")
+
                 else:
                     self.logger.error(f"[AUTO] Liquidation ÉCHOUÉE pour {ticker} — {raison}")
 
@@ -4331,7 +4371,22 @@ class BotRoute:
 
             # Récupère la position avec normalisation du symbole
             pos = positions.get(ticker) or positions.get(ticker_norm, {})
-            if self.alpaca.liquider_position(ticker):
+            _res_liq = self.alpaca.liquider_position(ticker)
+
+            if _res_liq == self.alpaca.LIQUIDATION_PDT:
+                # PDT bloqué — cooldown 23h + alerte Discord unique
+                self._cooldown[ticker] = time.time() + 82_800
+                self._sauvegarder_cooldowns()
+                self.logger.warning(f"[PDT] {ticker} — vente bloquée (Pattern Day Trader), cooldown 23h.")
+                try:
+                    self.discord._envoyer(
+                        f"⚠️ **PDT BLOQUÉ** — `{ticker}`\n"
+                        f"Vente bloquée (equity < $25k hier). Réessai à l'ouverture demain."
+                    )
+                except Exception:
+                    pass
+
+            elif _res_liq is True:
                 base["action_executee"] = "VENTE"
                 pnl_val = round(pos.get("unrealized_pl", 0), 2)
                 trade = {
