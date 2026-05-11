@@ -308,6 +308,15 @@ KRACH_PAUSE_H        = 48     # Pause en heures après un krach
 KRACH_VENTE_PCT      = 0.50   # Vendre 50% des positions
 BUNKER_FILE          = DATA_DIR / "bunker_mode.json"  # {actif_jusqu: timestamp}
 
+# ── Feature E : Time Stop ────────────────────────────────────────────────────
+TIME_STOP_HEURES = 48    # Sortir si position ouverte > 48h sans gain > 1%
+TIME_STOP_FILE   = DATA_DIR / "positions_ouverture.json"  # {ticker: timestamp_ouverture}
+
+# ── Feature F : Kill Switch — pertes consécutives ────────────────────────────
+KILL_MAX_PERTES_CONSECUTIVES = 5    # Pause si >= 5 pertes de suite
+KILL_PAUSE_PERTES_H          = 2    # Pause de 2h
+KILL_FILE                    = DATA_DIR / "kill_switch.json"
+
 # ── Mode Crypto Nuit/Weekend ─────────────────────────────────────────────
 # Quand le marché actions est fermé, le bot se concentre sur les cryptos (24/7).
 # Les cryptos reçoivent : barres 30min (plus granulaires), allocation +30%,
@@ -603,6 +612,84 @@ class AlpacaClientV2:
 
 
 # =============================================================================
+# [MODULE 2b] Fonctions quantitatives avancées (Hurst, Garman-Klass, Volume Delta)
+# =============================================================================
+
+import numpy as np  # noqa: E402 — déjà disponible via pandas-ta, import explicite pour sécurité
+
+
+def _calculer_hurst(prices: np.ndarray) -> float:
+    """
+    Exposant de Hurst par analyse R/S.
+    H < 0.45 → mean-reverting (acheter les creux, vendre les pics)
+    H = 0.5  → random walk (marché équilibré)
+    H > 0.55 → tendanciel (suivre la tendance)
+    Retourne 0.5 si données insuffisantes.
+    """
+    ts = np.asarray(prices, dtype=float)
+    if len(ts) < 40:
+        return 0.5
+    try:
+        lags = range(2, min(20, len(ts) // 3))
+        tau = []
+        for lag in lags:
+            diffs = ts[lag:] - ts[:-lag]
+            tau.append(np.sqrt(np.std(diffs) + 1e-10))
+        valid = [(lag, t) for lag, t in zip(lags, tau) if t > 0]
+        if len(valid) < 3:
+            return 0.5
+        lags_v, tau_v = zip(*valid)
+        poly = np.polyfit(np.log(lags_v), np.log(tau_v), 1)
+        return float(np.clip(poly[0] * 2.0, 0.0, 1.0))
+    except Exception:
+        return 0.5
+
+
+def _volatilite_garman_klass(opens, highs, lows, closes) -> float:
+    """
+    Estimateur Garman-Klass : plus précis que std(closes).
+    σ²_GK = 0.5×(ln(H/L))² - (2ln2-1)×(ln(C/O))²
+    Retourne la volatilité en % (annualisée en base horaire).
+    """
+    try:
+        opens  = np.array(opens,  dtype=float)
+        highs  = np.array(highs,  dtype=float)
+        lows   = np.array(lows,   dtype=float)
+        closes = np.array(closes, dtype=float)
+        if len(opens) < 5:
+            return 0.0
+        log_hl = np.log(highs / (lows + 1e-10))
+        log_co = np.log(closes / (opens + 1e-10))
+        gk = 0.5 * log_hl**2 - (2 * np.log(2) - 1) * log_co**2
+        # Annualisation sur base horaire (8760 heures/an)
+        return float(np.sqrt(np.mean(gk) * 8760) * 100)  # En %
+    except Exception:
+        return 0.0
+
+
+def _calculer_volume_delta(df) -> float:
+    """
+    Volume Delta proxy sur barres OHLCV.
+    Si close > open → bougie haussière → acheteurs ont dominé → delta positif
+    Retourne un score ∈ [-1, +1] : positif = pression acheteurs, négatif = vendeurs.
+    """
+    try:
+        if len(df) < 5:
+            return 0.0
+        recent = df.tail(min(20, len(df)))
+        # Intensité du delta par bougie : (close-open)/(high-low) pondérée par volume
+        ranges = recent["high"] - recent["low"]
+        ranges = ranges.replace(0, 1e-10)
+        delta_intensity = (recent["close"] - recent["open"]) / ranges
+        # Pondérer par le volume relatif
+        vol_norm = recent["volume"] / (recent["volume"].mean() + 1e-10)
+        weighted_delta = (delta_intensity * vol_norm).sum() / (vol_norm.sum() + 1e-10)
+        return float(np.clip(weighted_delta, -1.0, 1.0))
+    except Exception:
+        return 0.0
+
+
+# =============================================================================
 # [MODULE 3] MoteurIndicateurs — pandas-ta (HMA + tous les indicateurs)
 # =============================================================================
 
@@ -892,6 +979,91 @@ class MoteurIndicateurs:
         except Exception as e:
             self.logger.debug(f"Ichimoku {ticker}: {e}")
 
+        # ── Feature A : Exposant de Hurst ────────────────────────────────
+        try:
+            if len(df) >= 40:
+                closes_arr = df["close"].values
+                ind["hurst"] = _calculer_hurst(closes_arr)
+                hurst = ind["hurst"]
+                if hurst > 0.55:
+                    ind["regime_hurst"] = "TENDANCIEL"
+                elif hurst < 0.45:
+                    ind["regime_hurst"] = "MEAN_REVERTING"
+                else:
+                    ind["regime_hurst"] = "ALEATOIRE"
+            else:
+                ind["hurst"] = 0.5
+                ind["regime_hurst"] = "ALEATOIRE"
+        except Exception as e:
+            self.logger.debug(f"Hurst {ticker}: {e}")
+            ind["hurst"] = 0.5
+            ind["regime_hurst"] = "ALEATOIRE"
+
+        # ── Feature B : Volatilité Garman-Klass ──────────────────────────
+        try:
+            if len(df) >= 10 and all(c in df.columns for c in ["open", "high", "low", "close"]):
+                gk_vol = _volatilite_garman_klass(
+                    df["open"].values[-20:], df["high"].values[-20:],
+                    df["low"].values[-20:], df["close"].values[-20:]
+                )
+                ind["gk_volatility"] = round(gk_vol, 2)
+                if gk_vol > 80:
+                    ind["vol_regime"] = "CHAOTIQUE"
+                elif gk_vol > 40:
+                    ind["vol_regime"] = "HAUTE"
+                elif gk_vol > 15:
+                    ind["vol_regime"] = "NORMALE"
+                else:
+                    ind["vol_regime"] = "BASSE"
+            else:
+                ind["gk_volatility"] = 0.0
+                ind["vol_regime"] = "NORMALE"
+        except Exception as e:
+            self.logger.debug(f"Garman-Klass {ticker}: {e}")
+            ind["gk_volatility"] = 0.0
+            ind["vol_regime"] = "NORMALE"
+
+        # ── Feature C : Volume Delta (pression acheteurs vs vendeurs) ────
+        try:
+            delta = _calculer_volume_delta(df)
+            ind["volume_delta"] = round(delta, 3)
+            if delta > 0.3:
+                ind["delta_signal"] = "ACHETEURS"
+            elif delta < -0.3:
+                ind["delta_signal"] = "VENDEURS"
+            else:
+                ind["delta_signal"] = "EQUILIBRE"
+        except Exception as e:
+            self.logger.debug(f"Volume delta {ticker}: {e}")
+            ind["volume_delta"] = 0.0
+            ind["delta_signal"] = "EQUILIBRE"
+
+        # ── Feature H : Autocorrélation des returns (lag 1) ──────────────
+        try:
+            if len(df) >= 20:
+                returns = df["close"].pct_change().dropna().values[-20:]
+                if len(returns) >= 10:
+                    a = returns[:-1]
+                    b = returns[1:]
+                    autocorr = float(np.corrcoef(a, b)[0, 1])
+                    ind["autocorr"] = round(autocorr, 3)
+                    if autocorr < -0.3:
+                        ind["autocorr_signal"] = "MEAN_REVERSION"
+                    elif autocorr > 0.3:
+                        ind["autocorr_signal"] = "MOMENTUM"
+                    else:
+                        ind["autocorr_signal"] = "NEUTRE"
+                else:
+                    ind["autocorr"] = 0.0
+                    ind["autocorr_signal"] = "NEUTRE"
+            else:
+                ind["autocorr"] = 0.0
+                ind["autocorr_signal"] = "NEUTRE"
+        except Exception as e:
+            self.logger.debug(f"Autocorr {ticker}: {e}")
+            ind["autocorr"] = 0.0
+            ind["autocorr_signal"] = "NEUTRE"
+
         # ── Score composite ───────────────────────────────────────────────
         total_possible = sum(POIDS.values())
         score_buy  = (points_buy  / total_possible) * 100
@@ -901,6 +1073,30 @@ class MoteurIndicateurs:
             score = round(50 + score_buy / 2, 1)
         else:
             score = round(50 - score_sell / 2, 1)
+        score = max(0.0, min(100.0, score))
+
+        # ── Ajustements Hurst (Feature A) ─────────────────────────────────
+        regime_hurst = ind.get("regime_hurst", "ALEATOIRE")
+        if regime_hurst == "TENDANCIEL":
+            # Marché tendanciel : booster si signal BUY avec tendance
+            if score_buy > score_sell:
+                score = min(100.0, score + 5)
+            elif score_sell > score_buy:
+                score = max(0.0, score - 5)  # Pénaliser signal contre-tendance
+        elif regime_hurst == "MEAN_REVERTING":
+            # Mean-reverting : booster les signaux bollinger/vwap (déjà intégrés dans score)
+            bb_signal_buy  = (ind.get("bb_lower") is not None and prix <= ind.get("bb_lower", prix + 1))
+            vwap_signal_buy = ind.get("vwap_signal") == "au_dessus"
+            if bb_signal_buy or vwap_signal_buy:
+                score = min(100.0, score + 3)
+
+        # ── Ajustements Volume Delta (Feature C) ──────────────────────────
+        delta = ind.get("volume_delta", 0.0)
+        if delta > 0.3 and score_buy > score_sell:
+            score = min(100.0, score + 4)   # Fort flux acheteur + signal BUY → bonus
+        elif delta < -0.3 and score_sell > score_buy:
+            score = max(0.0, score - 4)     # Fort flux vendeur + signal SELL → renforcer
+
         score = max(0.0, min(100.0, score))
 
         # ── Signal et conviction ──────────────────────────────────────────
@@ -1903,6 +2099,10 @@ class GestionnaireBlacklist:
         now = time.time()
         return [t for t, v in self.data.items() if now < v.get("blacklist_jusqu", 0)]
 
+    def get_pertes_consecutives_global(self) -> int:
+        """Retourne le nb max de pertes consécutives parmi tous les tickers."""
+        return max((v.get("pertes_consecutives", 0) for v in self.data.values()), default=0)
+
 
 # =============================================================================
 # [MODULE 4c-extra2] MeteoEconomique — Feature 9: Météo économique mondiale
@@ -2484,6 +2684,10 @@ class GestionnaireRisque:
         self.capital_initial = capital_initial
         self.trailing_highs: dict = {}
         self.logger = logging.getLogger("Risque")
+        # Feature D : Break-even stop
+        self.breakeven_actifs: set  = set()   # Tickers avec breakeven activé
+        self.breakeven_levels: dict = {}      # {ticker: entry_price}
+        self.breakeven_atr: dict    = {}      # {ticker: atr_pct} mis à jour depuis _analyser_actif
         self._charger_trailing_highs()
 
     def _charger_trailing_highs(self):
@@ -2508,6 +2712,29 @@ class GestionnaireRisque:
         except Exception as e:
             self.logger.warning(f"Sauvegarde trailing_highs : {e}")
 
+    def verifier_breakeven(self, ticker: str, position: dict, prix_actuel: float) -> bool:
+        """
+        Déplace le stop au prix d'entrée si gain >= 1× ATR.
+        Retourne True si breakeven vient d'être activé.
+        """
+        try:
+            entry = float(position.get("avg_entry_price", 0) or position.get("entry_price", 0))
+            if entry <= 0:
+                return False
+            # Utiliser ATR de 1% par défaut si non disponible
+            atr_pct = self.breakeven_atr.get(ticker, 0.01)
+            atr_abs = entry * atr_pct
+            gain_r = (prix_actuel - entry) / (atr_abs + 1e-10)
+            if gain_r >= 1.0 and ticker not in self.breakeven_actifs:
+                self.breakeven_actifs.add(ticker)
+                self.breakeven_levels[ticker] = entry
+                self.logger.info(f"[BREAKEVEN] {ticker} — stop déplacé au prix d'entrée ${entry:.2f} (gain +{gain_r:.1f}R)")
+                return True
+            return False
+        except Exception as e:
+            self.logger.debug(f"Breakeven {ticker}: {e}")
+            return False
+
     def verifier_stop_loss(self, pos: dict) -> bool:
         ticker = pos.get("ticker", "")
         plpc   = pos.get("unrealized_plpc", 0)
@@ -2519,6 +2746,15 @@ class GestionnaireRisque:
                 f"(seuil {'MEME' if ticker in MEME_STOCKS else 'STD'} -{sl_pct*100:.0f}%)"
             )
             return True
+        # Feature D : Vérification breakeven
+        if ticker in self.breakeven_levels:
+            entry      = float(pos.get("avg_entry_price", 0))
+            be_level   = self.breakeven_levels[ticker]
+            prix_actuel = float(pos.get("current_price", entry))
+            # Si prix actuel revient au niveau breakeven et on était en gain → vendre
+            if prix_actuel < be_level * 1.001 and prix_actuel > entry * 0.995:
+                self.logger.info(f"[BREAKEVEN STOP] {ticker} — prix revenu au niveau d'entrée ${be_level:.2f}")
+                return True
         return False
 
     def verifier_take_profit(self, pos: dict) -> bool:
@@ -2809,6 +3045,8 @@ class BotRoute:
         self._insiders_data: dict = {}
         # Feature 11 : Journal hebdomadaire
         self._dernier_journal = None
+        # Feature G : Kelly historique (base de calcul d'allocation)
+        self._kelly_base = ALLOCATION_BASE
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         # Migration one-shot JSON → SQLite
         self.persistance.importer_json(self.historique_trades)
@@ -3749,6 +3987,19 @@ class BotRoute:
             "indicateurs":      tech["indicateurs"],
         })
 
+        # Feature D : Stocker l'ATR pour le calcul breakeven (GestionnaireRisque)
+        try:
+            atr_pct_val = tech["indicateurs"].get("atr_pct", 1.0) or 1.0
+            self.risque.breakeven_atr[ticker] = max(atr_pct_val / 100, 0.005)  # Min 0.5%
+        except Exception:
+            pass
+
+        # Feature B : Bloquer achat si volatilité Garman-Klass chaotique (actions seulement)
+        if not dans_position and "/" not in ticker:
+            if tech["indicateurs"].get("vol_regime") == "CHAOTIQUE":
+                base["raison"] = "Volatilité extrême (Garman-Klass) — trade bloqué"
+                return base
+
         # ── 2b. Score momentum vs SPY ─────────────────────────────────────
         if ticker != "SPY" and not self.df_spy.empty:
             mom = self.momentum.score_vs_spy(ticker, df, self.df_spy)
@@ -4520,6 +4771,155 @@ Sois direct, pratique, sans jargon technique."""
         except Exception as e:
             self.logger.warning(f"Journal hebdo: {e}")
 
+    # =========================================================================
+    # Feature F : Kill Switch — pertes consécutives
+    # =========================================================================
+
+    def _verifier_kill_switch_pertes(self) -> bool:
+        """Pause trading si trop de pertes consécutives. Retourne True si bloqué."""
+        try:
+            # Vérifier si kill switch déjà actif
+            if KILL_FILE.exists():
+                with open(KILL_FILE) as f:
+                    data = json.load(f)
+                if time.time() < data.get("actif_jusqu", 0):
+                    return True
+
+            # Vérifier le nb de pertes consécutives
+            nb_pertes = self.blacklist.get_pertes_consecutives_global()
+            if nb_pertes >= KILL_MAX_PERTES_CONSECUTIVES:
+                expiry = time.time() + KILL_PAUSE_PERTES_H * 3600
+                KILL_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with open(KILL_FILE, "w") as f:
+                    json.dump({"actif_jusqu": expiry, "raison": f"{nb_pertes} pertes consécutives"}, f)
+                self.discord._envoyer(
+                    f"🛑 **KILL SWITCH** — {nb_pertes} pertes consécutives détectées\n"
+                    f"Trading suspendu {KILL_PAUSE_PERTES_H}h pour protéger le capital\n"
+                    f"Reprise: {datetime.fromtimestamp(expiry).strftime('%d/%m à %Hh%M')}"
+                )
+                self.logger.error(f"[KILL SWITCH] {nb_pertes} pertes consécutives → pause {KILL_PAUSE_PERTES_H}h")
+                return True
+            return False
+        except Exception as e:
+            self.logger.debug(f"Kill switch pertes: {e}")
+            return False
+
+    # =========================================================================
+    # Feature E : Time Stop — fermer les positions "mortes"
+    # =========================================================================
+
+    def _verifier_time_stop(self, positions: dict):
+        """Ferme les positions ouvertes depuis trop longtemps sans gain."""
+        try:
+            ts_file = TIME_STOP_FILE
+            ouvertures = {}
+            if ts_file.exists():
+                with open(ts_file, encoding="utf-8") as f:
+                    ouvertures = json.load(f)
+
+            now = time.time()
+            changed = False
+            a_fermer = []
+
+            for ticker, pos in positions.items():
+                plpc = float(pos.get("unrealized_plpc", 0))
+                # Enregistrer l'heure d'ouverture si pas encore fait
+                if ticker not in ouvertures:
+                    ouvertures[ticker] = now
+                    changed = True
+                    continue
+
+                age_heures = (now - ouvertures[ticker]) / 3600
+
+                # Si position ouverte > TIME_STOP_HEURES et gain < 1% → fermer
+                if age_heures > TIME_STOP_HEURES and plpc < 0.01:
+                    a_fermer.append((ticker, age_heures, plpc * 100))
+
+            # Supprimer les tickers qui ne sont plus en position
+            for ticker in list(ouvertures.keys()):
+                if ticker not in positions:
+                    del ouvertures[ticker]
+                    changed = True
+
+            if changed or a_fermer:
+                ts_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(ts_file, "w", encoding="utf-8") as f:
+                    json.dump(ouvertures, f)
+
+            # Fermer les positions time-stopped
+            for ticker, age_h, plpc in a_fermer:
+                try:
+                    self.alpaca.liquider_position(ticker)
+                    if ticker in ouvertures:
+                        del ouvertures[ticker]
+                    ts_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(ts_file, "w", encoding="utf-8") as f:
+                        json.dump(ouvertures, f)
+                    self.discord._envoyer(
+                        f"⏰ **TIME STOP** `{ticker}` — Position fermée\n"
+                        f"Ouverte depuis {age_h:.0f}h | Gain: {plpc:+.1f}%\n"
+                        f"Position 'morte' éliminée pour libérer du capital"
+                    )
+                    self.logger.info(f"[TIME STOP] {ticker} fermé après {age_h:.0f}h | {plpc:+.1f}%")
+                except Exception as e:
+                    self.logger.error(f"Time stop {ticker}: {e}")
+        except Exception as e:
+            self.logger.warning(f"Time stop: {e}")
+
+    # =========================================================================
+    # Feature G : Kelly Fraction Dynamique (historique JSON)
+    # =========================================================================
+
+    def _calculer_kelly_historique(self) -> float:
+        """
+        Calcule la fraction Kelly basée sur les 30 derniers trades fermés.
+        Retourne la taille en $ à investir (entre ALLOCATION_FAIBLE et ALLOCATION_EXCELLENCE).
+        """
+        try:
+            if not HISTORIQUE_FILE.exists():
+                return ALLOCATION_BASE
+
+            with open(HISTORIQUE_FILE, encoding="utf-8") as f:
+                tous = json.load(f)
+
+            # Prendre les 30 derniers trades fermés
+            ventes = [t for t in tous if t.get("type") in ("VENTE", "VENTE_AUTO")][-30:]
+
+            if len(ventes) < 10:
+                return ALLOCATION_BASE  # Pas assez de données
+
+            pnls = [float(t.get("pnl_pct", 0)) for t in ventes]
+            gagnants = [p for p in pnls if p > 0]
+            perdants = [abs(p) for p in pnls if p < 0]
+
+            if not gagnants or not perdants:
+                return ALLOCATION_BASE
+
+            win_prob = len(gagnants) / len(pnls)
+            avg_win  = sum(gagnants) / len(gagnants) / 100  # En fraction
+            avg_loss = sum(perdants) / len(perdants) / 100  # En fraction
+
+            # Kelly = (p*b - q) / b
+            b = avg_win / (avg_loss + 1e-10)
+            q = 1.0 - win_prob
+            f_star = (win_prob * b - q) / (b + 1e-10)
+            f_star = max(0.0, min(f_star, 0.25))  # Plafonner à 25% Kelly
+
+            # Fraction conservatrice = 25% du Kelly théorique
+            kelly_fraction = f_star * 0.25
+
+            if kelly_fraction >= 0.08:
+                return ALLOCATION_EXCELLENCE
+            elif kelly_fraction >= 0.05:
+                return ALLOCATION_FORTE
+            elif kelly_fraction >= 0.03:
+                return ALLOCATION_BASE
+            else:
+                return ALLOCATION_FAIBLE
+        except Exception as e:
+            self.logger.debug(f"Kelly historique: {e}")
+            return ALLOCATION_BASE
+
     def run_cycle(self) -> dict:
         self.cycle += 1
         self.logger.info(f"══ Cycle #{self.cycle} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC ══")
@@ -4571,6 +4971,13 @@ Sois direct, pratique, sans jargon technique."""
         if self._verifier_mode_bunker(positions):
             return {"meta": {"cycle": self.cycle, "timestamp": datetime.now(timezone.utc).isoformat(),
                              "mode_bunker": True, "marche_ouvert": marche_ouvert},
+                    "portefeuille": {"equity": compte.get("equity", 0)}, "decisions_cycle": []}
+
+        # Feature F : Kill Switch — pertes consécutives (après bunker, avant tout trading)
+        if self._verifier_kill_switch_pertes():
+            self.logger.warning("Kill switch pertes consécutives actif — cycle ignoré")
+            return {"meta": {"cycle": self.cycle, "timestamp": datetime.now(timezone.utc).isoformat(),
+                             "kill_switch_pertes": True, "marche_ouvert": marche_ouvert},
                     "portefeuille": {"equity": compte.get("equity", 0)}, "decisions_cycle": []}
 
         if marche_ouvert:
@@ -4632,6 +5039,15 @@ Sois direct, pratique, sans jargon technique."""
         except Exception:
             pass
 
+        # Feature G : Kelly Historique (complète le Kelly SQLite avec données JSON)
+        try:
+            self._kelly_base = self._calculer_kelly_historique()
+            if kelly_base is None:
+                kelly_base = self._kelly_base
+            self.logger.info(f"💰 Kelly historique: ${self._kelly_base:.0f}")
+        except Exception:
+            pass
+
         # ── Exécution : crypto toujours active (24/7), actions selon marché ────
         executer_actions = marche_ouvert and not circuit_ouvert
         executer_crypto  = not circuit_ouvert   # Crypto s'exécute TOUJOURS (24/7)
@@ -4678,6 +5094,28 @@ Sois direct, pratique, sans jargon technique."""
 
         # Mémoriser les scores pour la prochaine sélection d'actions nuit
         self._dernieres_decisions = {d["ticker"]: d for d in decisions}
+
+        # Feature E : Time Stop — fermer les positions trop longtemps sans gain
+        try:
+            self._verifier_time_stop(positions)
+        except Exception as e:
+            self.logger.debug(f"Time stop cycle: {e}")
+
+        # Feature D : Break-Even Stop — déplacer stop au prix d'entrée après +1 ATR
+        try:
+            positions_be = self.alpaca.get_positions()
+            for ticker_be, pos_be in positions_be.items():
+                try:
+                    prix_be = float(pos_be.get("current_price", pos_be.get("avg_entry_price", 0)))
+                    if self.risque.verifier_breakeven(ticker_be, pos_be, prix_be):
+                        self.discord._envoyer(
+                            f"🔒 **BREAK-EVEN** `{ticker_be}` — Stop déplacé au prix d'entrée\n"
+                            f"Risque de perte éliminé — position protégée"
+                        )
+                except Exception as e:
+                    self.logger.debug(f"Breakeven check {ticker_be}: {e}")
+        except Exception as e:
+            self.logger.debug(f"Breakeven cycle: {e}")
 
         # Feature 10 : Suivi initiés SEC — une fois par cycle
         try:
@@ -4849,6 +5287,15 @@ Sois direct, pratique, sans jargon technique."""
         # Stress test portefeuille
         stress_test = self._stress_test(positions_apres, compte["equity"])
 
+        # Feature F : état kill switch pour export JSON
+        _kill_switch_actif = False
+        try:
+            if KILL_FILE.exists():
+                _ks_data = json.loads(KILL_FILE.read_text())
+                _kill_switch_actif = time.time() < _ks_data.get("actif_jusqu", 0)
+        except Exception:
+            pass
+
         # Trades récents depuis SQLite (plus fiable que la liste mémoire)
         trades_recents = self.persistance.charger_recents(500)
 
@@ -4920,6 +5367,13 @@ Sois direct, pratique, sans jargon technique."""
             "meteo_economique": meteo,
             # Feature 10 : Insiders
             "insiders_actifs": [t for t, v in self._insiders_data.items() if v],
+            # Features avancées (A-H)
+            "kill_switch_pertes": {
+                "actif": _kill_switch_actif,
+                "nb_pertes_consecutives": self.blacklist.get_pertes_consecutives_global(),
+            },
+            "kelly_historique_usd": self._kelly_base,
+            "breakeven_actifs": list(self.risque.breakeven_actifs),
             "config": {
                 "stop_loss_pct":      STOP_LOSS_PCT * 100,
                 "take_profit_pct":    TAKE_PROFIT_PCT * 100,
