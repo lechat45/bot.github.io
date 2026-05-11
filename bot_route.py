@@ -3946,6 +3946,11 @@ class BotRoute:
             # LT positions protégées de la vente automatique CT
             if self.portefeuille_lt and self.portefeuille_lt.est_position_lt(ticker):
                 continue
+            # PDT / cooldown actif → ne pas retenter avant expiration
+            if self._en_cooldown(ticker):
+                reste = int(self._cooldown[ticker] - time.time())
+                self.logger.debug(f"[AUDIT] {ticker} en cooldown PDT/stop — {reste // 3600}h{(reste % 3600) // 60}m restants")
+                continue
 
             raison = None
             plpc = pos.get("unrealized_plpc", 0)
@@ -4367,6 +4372,13 @@ class BotRoute:
                 sacha_lt = base.get("sacha_pro", {})
                 base["raison"] += f" | {sacha_lt.get('details', '')}"
                 self.logger.info(f"[LT] {ticker} — vente CT bloquée (position LT protégée)")
+                return base
+
+            # PDT / cooldown actif → ne pas retenter la vente
+            if self._en_cooldown(ticker):
+                reste = int(self._cooldown[ticker] - time.time())
+                base["raison"] = f"⏳ PDT cooldown — vente bloquée {reste // 3600}h{(reste % 3600) // 60}m"
+                self.logger.debug(f"[SELL] {ticker} en cooldown PDT — {reste // 3600}h{(reste % 3600) // 60}m restants")
                 return base
 
             # Récupère la position avec normalisation du symbole
