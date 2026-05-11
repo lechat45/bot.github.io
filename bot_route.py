@@ -253,10 +253,10 @@ BARRES_CACHE_TTL      = 300     # Cache OHLC 5 min pour éviter les requêtes re
 
 # ── Meme stocks — stop-loss serré (haute volatilité) ─────────────────────
 STOP_LOSS_MEME        = 0.04    # 4% SL pour meme stocks (vs 3% standard)
-MEME_STOCKS           = {"AMC", "GME", "HOOD", "DOGE/USD"}
+MEME_STOCKS           = {"AMC", "GME", "HOOD", "DOGE/USD", "DOGEUSD"}
                                 # AMC/GME : volatilité extrême, squeeze imprévisible
                                 # HOOD : corrélé retail sentiment
-                                # DOGE/USD : crypto meme, drawdowns violents
+                                # DOGE/USD / DOGEUSD : crypto meme, drawdowns violents (deux formats)
 
 # ── Feature 1 : Pyramiding (renforcer les gagnants) ──────────────────────────
 PYRAMIDING_SEUIL_PCT   = 3.0    # % gain minimum pour pyramider
@@ -2738,12 +2738,15 @@ class GestionnaireRisque:
     def verifier_stop_loss(self, pos: dict) -> bool:
         ticker = pos.get("ticker", "")
         plpc   = pos.get("unrealized_plpc", 0)
+        # Normaliser le ticker pour la comparaison (DOGEUSD ↔ DOGE/USD)
+        ticker_norm = ticker.replace("/", "")
+        is_meme = ticker in MEME_STOCKS or ticker_norm in MEME_STOCKS
         # Stop-loss plus serré pour les meme stocks (4% vs 3% standard)
-        sl_pct = STOP_LOSS_MEME if ticker in MEME_STOCKS else STOP_LOSS_PCT
+        sl_pct = STOP_LOSS_MEME if is_meme else STOP_LOSS_PCT
         if plpc <= -(sl_pct * 100):
             self.logger.warning(
                 f"🛑 STOP-LOSS {ticker}: {plpc:.2f}% "
-                f"(seuil {'MEME' if ticker in MEME_STOCKS else 'STD'} -{sl_pct*100:.0f}%)"
+                f"(seuil {'MEME' if is_meme else 'STD'} -{sl_pct*100:.0f}%)"
             )
             return True
         # Feature D : Vérification breakeven
@@ -3901,31 +3904,70 @@ class BotRoute:
         except Exception as e:
             self.logger.warning(f"Apprentissage patterns: {e}")
 
-    def _auditer_positions(self, positions: dict):
+    def _auditer_positions(self, positions: dict, marche_ouvert: bool = True):
+        """
+        Vérifie stop-loss, take-profit et trailing stop sur toutes les positions.
+        CRYPTO : audité 24/7 (même marché fermé).
+        ACTIONS : audité seulement si marché ouvert.
+        """
+        # Ensemble de tous les tickers crypto connus (deux formats)
+        _crypto_tickers = set(ACTIFS_CRYPTO) | {t.replace("/", "") for t in ACTIFS_CRYPTO}
         for ticker, pos in list(positions.items()):
+            # Détection crypto : slash dans le ticker, OU dans la liste connue,
+            # OU finit par USD avec ≤8 chars (BTCUSD, DOGEUSD, etc.)
+            est_crypto = (
+                "/" in ticker
+                or ticker in _crypto_tickers
+                or (ticker.endswith("USD") and len(ticker) <= 8)
+            )
+            # Actions : seulement si marché ouvert
+            if not est_crypto and not marche_ouvert:
+                continue
+            # LT positions protégées de la vente automatique CT
+            if self.portefeuille_lt and self.portefeuille_lt.est_position_lt(ticker):
+                continue
+
             raison = None
-            if self.risque.verifier_stop_loss(pos):
-                raison = f"STOP-LOSS {pos['unrealized_plpc']:.2f}%"
-            elif self.risque.verifier_take_profit(pos):
-                raison = f"TAKE-PROFIT {pos['unrealized_plpc']:.2f}%"
-            elif self.risque.verifier_trailing_stop(pos):
-                raison = "TRAILING-STOP"
+            plpc = pos.get("unrealized_plpc", 0)
+            try:
+                if self.risque.verifier_stop_loss(pos):
+                    raison = f"STOP-LOSS {plpc:.2f}%"
+                elif self.risque.verifier_take_profit(pos):
+                    raison = f"TAKE-PROFIT {plpc:.2f}%"
+                elif self.risque.verifier_trailing_stop(pos):
+                    raison = f"TRAILING-STOP depuis plus haut"
+            except Exception as e:
+                self.logger.debug(f"Audit {ticker}: {e}")
+                continue
+
             if raison:
-                if self.alpaca.liquider_position(ticker):
+                ok = self.alpaca.liquider_position(ticker)
+                if ok:
+                    pnl = round(pos.get("unrealized_pl", 0), 2)
                     trade = {
                         "type": "VENTE_AUTO", "ticker": ticker,
-                        "prix": pos["current_price"],
-                        "pnl": round(pos["unrealized_pl"], 2),
-                        "pnl_pct": round(pos["unrealized_plpc"], 2),
+                        "prix": pos.get("current_price", 0),
+                        "pnl": pnl,
+                        "pnl_pct": round(plpc, 2),
                         "raison": raison,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                     self.historique_trades.append(trade)
                     self.persistance.sauvegarder(trade)
-                    # Cooldown après stop-loss pour éviter de re-rentrer immédiatement
-                    if "STOP-LOSS" in raison:
+                    # Cooldown pour éviter de re-rentrer immédiatement
+                    if "STOP-LOSS" in raison or "TRAILING" in raison:
                         self._definir_cooldown(ticker)
-                    self.logger.info(f"[AUTO] {ticker} — {raison}")
+                    # Mettre à jour la blacklist (pertes consécutives)
+                    try:
+                        self.blacklist.enregistrer_resultat(ticker, pnl, self.discord._envoyer)
+                    except Exception:
+                        pass
+                    # Notification Discord
+                    emoji = "🛑" if "STOP" in raison else "✅"
+                    self.discord.notifier_vente(ticker, pnl, plpc, raison)
+                    self.logger.info(f"[AUTO] {ticker} — {raison} | PnL: {pnl:+.2f}$")
+                else:
+                    self.logger.error(f"[AUTO] Liquidation ÉCHOUÉE pour {ticker} — {raison}")
 
     def _analyser_actif(self, ticker: str, positions: dict, compte: dict,
                         executer: bool = True, kelly_base: float = None,
@@ -4980,8 +5022,8 @@ Sois direct, pratique, sans jargon technique."""
                              "kill_switch_pertes": True, "marche_ouvert": marche_ouvert},
                     "portefeuille": {"equity": compte.get("equity", 0)}, "decisions_cycle": []}
 
-        if marche_ouvert:
-            self._auditer_positions(positions)
+        # ── Audit stops : TOUJOURS actif (crypto 24/7, actions si marché ouvert) ──
+        self._auditer_positions(positions, marche_ouvert=marche_ouvert)
 
         # Données SPY pour score momentum
         self.df_spy = self.alpaca.get_barres("SPY")
