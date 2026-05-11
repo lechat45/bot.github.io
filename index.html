@@ -863,8 +863,622 @@
       .mc-stats { grid-template-columns: repeat(2,1fr); }
     }
   </style>
+
+  <!-- =========================================================
+       [ENHANCEMENT LAYER] — Visual polish & refinements
+       Overrides progressives, garde toutes les fonctionnalités
+  ========================================================= -->
+  <style>
+    /* ── Background : mesh de néons doux, animé lentement ───── */
+    body {
+      background:
+        radial-gradient(ellipse 80% 60% at 12% -10%, rgba(0,255,242,0.10) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 92% 8%,  rgba(255,45,120,0.09) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 50% 120%,rgba(181,109,255,0.08) 0%, transparent 60%),
+        #02040a;
+    }
+    body::before {
+      background-image:
+        linear-gradient(rgba(0,255,242,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,242,0.025) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(ellipse 100% 80% at 50% 0%, #000 25%, transparent 90%);
+      -webkit-mask-image: radial-gradient(ellipse 100% 80% at 50% 0%, #000 25%, transparent 90%);
+    }
+    body::after {
+      background:
+        radial-gradient(circle at 90% -5%, rgba(255,45,120,0.10) 0%, transparent 50%),
+        radial-gradient(circle at -5% 105%, rgba(0,255,242,0.07) 0%, transparent 50%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0 1px, transparent 1px 4px);
+      animation: ambient-drift 22s ease-in-out infinite alternate;
+    }
+    @keyframes ambient-drift {
+      0%   { transform: translate3d(0,0,0); opacity: 1; }
+      100% { transform: translate3d(-12px, 8px, 0); opacity: .85; }
+    }
+
+    /* ── Ticker tape : ombre plus profonde + dégradé latéral ── */
+    .tape {
+      background: linear-gradient(180deg, #05080f 0%, #02040a 100%);
+      box-shadow: 0 1px 0 rgba(255,45,120,0.12), 0 10px 32px -16px rgba(0,0,0,0.95);
+    }
+    .tape::after {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background:
+        linear-gradient(90deg, #02040a 0%, transparent 6%, transparent 94%, #02040a 100%);
+    }
+
+    /* ── Logo : éclat plus marqué + slash animé ─────────────── */
+    .logo-name {
+      background: linear-gradient(135deg, #ffffff 0%, #00fff2 40%, #4e8cff 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 18px rgba(0,255,242,0.35));
+    }
+    .logo-slash {
+      -webkit-text-fill-color: #ff2d78;
+      animation: logo-pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes logo-pulse {
+      0%,100% { filter: drop-shadow(0 0 8px rgba(255,45,120,0.4)); }
+      50%     { filter: drop-shadow(0 0 18px rgba(255,45,120,0.85)); }
+    }
+
+    /* ── Header clock : aspect chrono ──────────────────────── */
+    .hdr-clock {
+      background: linear-gradient(180deg, #0c1422 0%, #07101c 100%);
+      box-shadow:
+        inset 0 0 16px rgba(0,255,242,0.06),
+        0 0 0 1px rgba(0,255,242,0.10),
+        0 8px 24px -12px rgba(0,255,242,0.18);
+    }
+    .hdr-clock .val {
+      background: linear-gradient(180deg, #b4faff 0%, #00fff2 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ── Pills : look "card" plus net + transitions ─────────── */
+    .pill {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: transform .15s ease, box-shadow .2s ease, border-color .2s;
+      border-radius: 4px;
+    }
+    .pill:hover { transform: translateY(-1px); }
+    .pill.live { box-shadow: 0 0 14px -4px rgba(184,255,0,0.45); }
+    .pill.groq { box-shadow: 0 0 14px -4px rgba(255,45,120,0.45); }
+
+    /* ── Tab navigation : pill modernisée ──────────────────── */
+    .tab-nav {
+      border-bottom: 1px solid rgba(0,255,242,0.10);
+      padding: 14px 4px 0;
+      gap: 6px;
+      position: relative;
+    }
+    .tab-nav::after {
+      content:''; position:absolute; left:0; right:0; bottom:-1px; height:1px;
+      background: linear-gradient(90deg, transparent, rgba(0,255,242,0.40), transparent);
+    }
+    .tab-btn {
+      position: relative;
+      padding: 10px 22px;
+      border-radius: 8px 8px 0 0;
+      letter-spacing: 1.4px;
+      font-weight: 700;
+      background: rgba(12,20,34,0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      transition: all .25s cubic-bezier(.4,0,.2,1);
+      color: #5a7090;
+      border: 1px solid transparent;
+    }
+    .tab-btn:hover {
+      background: rgba(0,255,242,0.06);
+      color: #b4faff;
+      transform: translateY(-1px);
+    }
+    .tab-btn.active {
+      background: linear-gradient(180deg, rgba(0,255,242,0.12) 0%, rgba(0,255,242,0.04) 100%);
+      color: #00fff2;
+      border: 1px solid rgba(0,255,242,0.22);
+      border-bottom: 1px solid transparent;
+      text-shadow: 0 0 12px rgba(0,255,242,0.55);
+      box-shadow: 0 -4px 18px -4px rgba(0,255,242,0.25);
+    }
+    .tab-btn.active::after {
+      content:''; position:absolute; left:14%; right:14%; bottom:-1px; height:2px;
+      background: linear-gradient(90deg, transparent, #00fff2, transparent);
+      box-shadow: 0 0 10px #00fff2;
+    }
+
+    /* ── Cartes métriques hero : glass + glow rim ──────────── */
+    .met {
+      background:
+        linear-gradient(180deg, rgba(15,24,40,0.92) 0%, rgba(9,15,28,0.92) 100%);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,255,242,0.10);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.04),
+        0 8px 28px -16px rgba(0,0,0,0.7);
+      transition: transform .25s cubic-bezier(.4,0,.2,1), border-color .25s, box-shadow .25s;
+    }
+    .met:hover {
+      transform: translateY(-3px);
+      border-color: rgba(0,255,242,0.30);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        0 14px 38px -16px rgba(0,255,242,0.30),
+        0 0 0 1px rgba(0,255,242,0.10);
+    }
+    .met::before {
+      width: 3px;
+      filter: blur(0.4px);
+    }
+    .met-val {
+      font-size: 30px;
+      letter-spacing: -1.8px;
+    }
+    .gauge {
+      height: 5px;
+      background: linear-gradient(180deg, #0a1220 0%, #060a14 100%);
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+    }
+    .gauge-fill {
+      box-shadow: 0 0 8px currentColor;
+      position: relative;
+    }
+    .gauge-fill::after {
+      content:''; position:absolute; inset:0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+      animation: gauge-shimmer 2.4s linear infinite;
+    }
+    @keyframes gauge-shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+
+    /* ── Sys / Config rows : verre fumé ─────────────────────── */
+    .sys, .cfg {
+      background: linear-gradient(180deg, rgba(12,20,34,0.85) 0%, rgba(7,13,24,0.85) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,255,242,0.10);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .chip {
+      background: linear-gradient(180deg, rgba(20,30,48,0.6) 0%, rgba(12,20,34,0.6) 100%);
+      transition: all .18s;
+    }
+    .chip:hover {
+      border-color: rgba(0,255,242,0.28);
+      transform: translateY(-1px);
+    }
+
+    /* ── Phd (panel headers) : barre supérieure néon ───────── */
+    .phd {
+      background: linear-gradient(180deg, rgba(20,30,48,0.95) 0%, rgba(12,20,34,0.95) 100%);
+      border-bottom: 1px solid rgba(0,255,242,0.10);
+      position: relative;
+    }
+    .phd::after {
+      content:''; position:absolute; left:0; right:0; bottom:-1px; height:1px;
+      background: linear-gradient(90deg, transparent 5%, rgba(0,255,242,0.30) 50%, transparent 95%);
+    }
+
+    /* ── Chart container : aura ─────────────────────────────── */
+    .chart-wrap {
+      background:
+        radial-gradient(ellipse 80% 100% at 50% 0%, rgba(0,255,242,0.06) 0%, transparent 70%),
+        linear-gradient(180deg, rgba(15,24,40,0.92) 0%, rgba(9,15,28,0.92) 100%);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,255,242,0.10);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.04),
+        0 12px 40px -20px rgba(0,255,242,0.15);
+    }
+
+    /* ── Cards (générique) ───────────────────────────────────── */
+    .card, .pnl {
+      background: linear-gradient(180deg, rgba(15,24,40,0.90) 0%, rgba(9,15,28,0.90) 100%);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,255,242,0.10);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.04),
+        0 8px 28px -18px rgba(0,0,0,0.7);
+      transition: border-color .25s, box-shadow .25s;
+    }
+    .card:hover, .pnl:hover {
+      border-color: rgba(0,255,242,0.18);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        0 10px 34px -18px rgba(0,255,242,0.20);
+    }
+
+    /* ── Asset cards : élévation au survol + halo de bord ──── */
+    .acard {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: transform .2s cubic-bezier(.4,0,.2,1), box-shadow .25s, border-color .2s;
+      will-change: transform;
+    }
+    .acard::before { width: 3px; }
+    .acard:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px -14px rgba(0,255,242,0.30), 0 0 0 1px rgba(0,255,242,0.15);
+    }
+    .acard.achat:hover {
+      box-shadow: 0 12px 28px -14px rgba(184,255,0,0.35), 0 0 0 1px rgba(184,255,0,0.30);
+    }
+    .acard.vente:hover {
+      box-shadow: 0 12px 28px -14px rgba(255,56,96,0.35), 0 0 0 1px rgba(255,56,96,0.30);
+    }
+    .acard.held:hover {
+      box-shadow: 0 12px 28px -14px rgba(255,45,120,0.40), 0 0 0 1px rgba(255,45,120,0.30);
+    }
+    .asym {
+      background: linear-gradient(180deg, #d4f7ff 0%, #00fff2 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ── Filtres grille actifs ──────────────────────────────── */
+    .afilter {
+      transition: all .18s cubic-bezier(.4,0,.2,1);
+      backdrop-filter: blur(6px);
+    }
+    .afilter:hover { transform: translateY(-1px); }
+    .afilter.active { box-shadow: 0 0 14px -4px currentColor; }
+
+    /* ── Table positions : ligne au survol plus chaleureuse ── */
+    .tbl tr { transition: background .15s; }
+    .tbl tr:hover td {
+      background: linear-gradient(90deg, rgba(0,255,242,0.05) 0%, rgba(255,45,120,0.04) 100%);
+    }
+    .tbl th {
+      background: linear-gradient(180deg, rgba(20,30,48,0.95) 0%, rgba(15,24,40,0.95) 100%);
+      color: #7a92b3;
+    }
+
+    /* ── Scrollbars custom (Firefox + WebKit) ─────────────── */
+    * { scrollbar-width: thin; scrollbar-color: rgba(0,255,242,0.25) transparent; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.20); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(0,255,242,0.35), rgba(255,45,120,0.30));
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(0,255,242,0.55), rgba(255,45,120,0.50));
+    }
+
+    /* ── Trades rows : transitions adoucies ─────────────────── */
+    .trow { transition: background .15s, transform .12s; }
+    .trow:hover { transform: translateX(2px); }
+    .ticon {
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+      transition: transform .2s;
+    }
+    .trow:hover .ticon { transform: scale(1.06) rotate(-2deg); }
+
+    /* ── Regime badge plus typé ─────────────────────────────── */
+    .regime-badge {
+      padding: 8px 18px;
+      letter-spacing: 2.5px;
+      box-shadow: 0 0 0 1px currentColor inset, 0 6px 20px -10px currentColor;
+      backdrop-filter: blur(6px);
+    }
+
+    /* ── Footer plus subtil ─────────────────────────────────── */
+    .footer {
+      margin-top: 36px;
+      padding: 18px 0;
+      background: linear-gradient(180deg, transparent, rgba(0,255,242,0.03));
+      border-top: 1px solid rgba(0,255,242,0.10);
+      border-radius: 8px 8px 0 0;
+    }
+
+    /* ── Animation d'entrée plus douce ──────────────────────── */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(2px); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
+    }
+    .shell > * { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
+
+    /* ── Focus visible accessible ──────────────────────────── */
+    button:focus-visible, .afilter:focus-visible, .tab-btn:focus-visible {
+      outline: 2px solid #00fff2;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* ── Réduction de mouvement ─────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ── Micro-correctifs typographie ───────────────────────── */
+    body { text-rendering: optimizeLegibility; }
+    .phd-t, .met-lbl, .sys-lbl { text-shadow: 0 0 14px currentColor; }
+
+    /* ── Badge de santé du bot : meilleur contraste ────────── */
+    #bot-health {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: all .3s;
+    }
+
+    /* ── Skeleton loader plus brillant ─────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg,
+        rgba(0,255,242,0.03) 25%,
+        rgba(0,255,242,0.15) 50%,
+        rgba(0,255,242,0.03) 75%);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       OFFLINE MODAL — Popup quand aucune donnée
+    ══════════════════════════════════════════════════════════ */
+    .om-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: radial-gradient(ellipse at center, rgba(2,4,10,0.88) 0%, rgba(2,4,10,0.96) 100%);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      display: none; align-items: center; justify-content: center;
+      padding: 20px; animation: om-fade .25s ease-out;
+    }
+    .om-overlay.show { display: flex; }
+    @keyframes om-fade { from{opacity:0} to{opacity:1} }
+    @keyframes om-rise { from{opacity:0; transform:translateY(20px) scale(.96)} to{opacity:1; transform:translateY(0) scale(1)} }
+    .om-card {
+      position: relative; max-width: 480px; width: 100%;
+      background: linear-gradient(180deg, #0c1422 0%, #060a14 100%);
+      border: 1px solid rgba(255,45,120,0.30);
+      border-radius: 12px; padding: 30px 28px 22px;
+      box-shadow:
+        0 0 0 1px rgba(255,45,120,0.10) inset,
+        0 30px 80px -20px rgba(255,45,120,0.30),
+        0 0 100px -20px rgba(255,45,120,0.25);
+      animation: om-rise .35s cubic-bezier(.2,.7,.2,1);
+    }
+    .om-card::before {
+      content:''; position:absolute; inset:0; border-radius: 12px; pointer-events:none;
+      background: radial-gradient(ellipse 100% 50% at 50% 0%, rgba(255,45,120,0.10), transparent 70%);
+    }
+    .om-close {
+      position: absolute; top: 12px; right: 14px;
+      background: transparent; border: 1px solid rgba(255,255,255,0.10); color: #7a92b3;
+      width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+      font-family: var(--mono); font-size: 12px;
+      transition: all .18s;
+    }
+    .om-close:hover { background: rgba(255,45,120,0.10); color: #ff2d78; border-color: rgba(255,45,120,0.40); }
+    .om-icon {
+      display: flex; justify-content: center; margin-bottom: 14px;
+      animation: om-pulse 2s ease-in-out infinite;
+    }
+    @keyframes om-pulse {
+      0%,100% { filter: drop-shadow(0 0 8px rgba(255,45,120,0.30)); transform: scale(1); }
+      50%     { filter: drop-shadow(0 0 22px rgba(255,45,120,0.75)); transform: scale(1.04); }
+    }
+    .om-tag {
+      text-align: center;
+      font: 700 9px var(--mono); letter-spacing: 3px;
+      color: #ff2d78; margin-bottom: 10px;
+      text-shadow: 0 0 12px rgba(255,45,120,0.5);
+    }
+    .om-title {
+      text-align: center; font: 700 26px var(--head);
+      color: #fff; margin-bottom: 10px; letter-spacing: -.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #ff2d78 100%);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .om-text {
+      text-align: center; font: 400 13px var(--head); color: #a8b8d0;
+      line-height: 1.55; margin-bottom: 18px;
+    }
+    .om-text code {
+      font: 600 11px var(--mono); background: rgba(0,255,242,0.10);
+      color: #00fff2; padding: 1px 6px; border-radius: 3px;
+      border: 1px solid rgba(0,255,242,0.20);
+    }
+    .om-meta {
+      background: rgba(0,0,0,0.30); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 18px;
+    }
+    .om-meta-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 0; font: 500 11px var(--mono); color: #7a92b3;
+    }
+    .om-meta-row b { color: #00fff2; font-weight: 700; letter-spacing: .5px; }
+    .om-meta-row .om-bad { color: #ff2d78; text-shadow: 0 0 8px rgba(255,45,120,0.5); }
+    .om-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+    .om-btn {
+      flex: 1; padding: 11px 14px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+      color: #a8b8d0; font: 700 11px var(--mono); letter-spacing: 1px;
+      border-radius: 6px; cursor: pointer; transition: all .18s;
+    }
+    .om-btn:hover { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
+    .om-btn.primary {
+      background: linear-gradient(135deg, #ff2d78 0%, #b8267a 100%);
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 18px -6px rgba(255,45,120,0.6);
+    }
+    .om-btn.primary:hover { box-shadow: 0 6px 24px -6px rgba(255,45,120,0.85); }
+    .om-help {
+      list-style: none; padding: 12px 14px;
+      background: rgba(0,255,242,0.04); border: 1px solid rgba(0,255,242,0.12);
+      border-radius: 6px;
+    }
+    .om-help li {
+      font: 500 11px var(--mono); color: #a8b8d0; padding: 3px 0; line-height: 1.5;
+    }
+    .om-help code {
+      font: 600 10px var(--mono); color: #00fff2;
+      background: rgba(0,255,242,0.10); padding: 1px 5px; border-radius: 3px;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       OFFLINE BANNER (sticky en haut, sous le ticker tape)
+    ══════════════════════════════════════════════════════════ */
+    #offline-banner {
+      position: sticky; top: 30px; z-index: 150;
+      align-items: center; gap: 10px;
+      padding: 8px 18px;
+      background: linear-gradient(90deg, rgba(255,45,120,0.18), rgba(255,45,120,0.08));
+      border-bottom: 1px solid rgba(255,45,120,0.40);
+      font: 700 11px var(--mono); color: #ffb8d0; letter-spacing: 1px;
+      box-shadow: 0 4px 18px -6px rgba(255,45,120,0.35);
+    }
+    .ob-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #ff2d78; box-shadow: 0 0 12px #ff2d78;
+      animation: ob-blink 1.2s ease-in-out infinite;
+    }
+    @keyframes ob-blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .ob-btn {
+      margin-left: auto;
+      background: rgba(255,45,120,0.15); border: 1px solid rgba(255,45,120,0.50);
+      color: #fff; font: 700 10px var(--mono); letter-spacing: 1px;
+      padding: 4px 12px; border-radius: 4px; cursor: pointer;
+      transition: all .18s;
+    }
+    .ob-btn:hover { background: rgba(255,45,120,0.30); transform: translateY(-1px); }
+
+    /* ══════════════════════════════════════════════════════════
+       EMPTY STATES — Toujours visibles, jamais "vides"
+    ══════════════════════════════════════════════════════════ */
+    .empty {
+      padding: 32px 20px !important;
+      text-align: center; color: #5a7090;
+      background:
+        radial-gradient(ellipse 80% 40% at 50% 50%, rgba(0,255,242,0.04), transparent 70%);
+      border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      min-height: 80px; justify-content: center;
+    }
+    .empty::before {
+      content: '◌'; display: block;
+      font-size: 28px; color: rgba(0,255,242,0.25);
+      animation: empty-spin 4s linear infinite;
+    }
+    @keyframes empty-spin { to { transform: rotate(360deg); } }
+
+    .shadow-empty {
+      padding: 24px 16px !important;
+      background: radial-gradient(ellipse 80% 40% at 50% 50%, rgba(0,255,242,0.04), transparent 70%);
+      border: 1px dashed rgba(0,255,242,0.15);
+      border-radius: 8px;
+      color: #5a7090; font: 500 11px var(--mono); letter-spacing: 1px;
+    }
+
+    /* Améliore les zones vides au sein des cartes : ajoute un placeholder
+       visuel uniforme dès qu'il n'y a aucun enfant utile */
+    .card-body > span[style*="color:var(--dim)"]:only-child,
+    .card-body > div > span[style*="color:var(--dim)"]:only-child {
+      display: inline-block;
+      padding: 14px 18px;
+      background: rgba(0,255,242,0.03);
+      border: 1px dashed rgba(0,255,242,0.12);
+      border-radius: 6px;
+      width: 100%; text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       AMÉLIORATIONS VISIBILITÉ
+    ══════════════════════════════════════════════════════════ */
+    /* Tags d'aide / tooltips visuels sur les titres de cartes */
+    .phd-t, .phd-l {
+      position: relative;
+    }
+    /* Indicateur "live data" : petit point cyan pulsant à côté des titres */
+    .pnl .phd-t::before,
+    .chart-wrap .phd-t::before {
+      content:''; display:inline-block; width:6px; height:6px; border-radius:50%;
+      background: #00fff2; box-shadow: 0 0 8px #00fff2;
+      margin-right: 8px; vertical-align: middle;
+      animation: pulse-a 2s infinite;
+    }
+
+    /* Contraste accru sur le texte secondaire */
+    .met-sub { color: #7a92b3; font-size: 10px; }
+    .areason { color: #7a92b3 !important; }
+    .tdet { color: #7a92b3; }
+
+    /* Légende couleurs en bas de page */
+    .legend-bar {
+      display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+      padding: 10px 14px; margin-top: 10px;
+      background: linear-gradient(180deg, rgba(12,20,34,0.6), rgba(7,13,24,0.6));
+      border: 1px solid rgba(0,255,242,0.08);
+      border-radius: 8px;
+      font: 600 9px var(--mono); letter-spacing: 1.5px;
+    }
+    .legend-bar .lg {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: #7a92b3;
+    }
+    .legend-bar .lg::before {
+      content:''; width:10px; height:10px; border-radius:2px;
+      background: var(--lg-c, #00fff2);
+      box-shadow: 0 0 6px var(--lg-c, #00fff2);
+    }
+
+    /* Tooltips natifs plus visibles via title=… : on s'appuie sur le navigateur */
+    [title]:hover { cursor: help; }
+  </style>
 </head>
 <body>
+
+<!-- ════════════════════════════════════════════════════════════
+     POPUP / MODALE — Hors-ligne (aucune donnée disponible)
+════════════════════════════════════════════════════════════ -->
+<div id="offline-modal" class="om-overlay" role="dialog" aria-modal="true" aria-labelledby="om-title">
+  <div class="om-card">
+    <button class="om-close" data-close-modal aria-label="Fermer">✕</button>
+    <div class="om-icon">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#ff2d78" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+        <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+        <line x1="12" y1="20" x2="12.01" y2="20"></line>
+        <line x1="2" y1="2" x2="22" y2="22"></line>
+      </svg>
+    </div>
+    <div class="om-tag">ROUTE/v4 · CONNEXION PERDUE</div>
+    <h2 id="om-title" class="om-title">Aucune donnée reçue</h2>
+    <p class="om-text">
+      Le tableau de bord ne reçoit plus le fichier <code>data/etat_bot.json</code>.
+      <br>Vérifie que le bot <code>bot_route.py</code> tourne et exporte ses données.
+    </p>
+    <div class="om-meta">
+      <div class="om-meta-row"><span>Statut</span><b class="om-bad">✕ HORS-LIGNE</b></div>
+      <div class="om-meta-row"><span>Hors-ligne depuis</span><b id="offline-since">—</b></div>
+      <div class="om-meta-row"><span>Prochain essai</span><b>auto · 8 s</b></div>
+    </div>
+    <div class="om-actions">
+      <button class="om-btn primary" data-retry>↻ Réessayer maintenant</button>
+      <button class="om-btn" data-close-modal>Continuer hors-ligne</button>
+    </div>
+    <ul class="om-help">
+      <li>1. Lance le bot : <code>python bot_route.py</code></li>
+      <li>2. Vérifie que <code>data/etat_bot.json</code> existe et est lisible</li>
+      <li>3. Si tu sers le site, vérifie que le dossier <code>data/</code> est accessible</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Bandeau hors-ligne (visible quand modale fermée) -->
+<div id="offline-banner" style="display:none">
+  <span class="ob-dot"></span>
+  <span>Hors-ligne — aucune donnée reçue.</span>
+  <button class="ob-btn" data-retry>↻ Réessayer</button>
+</div>
 
 <!-- =============================================================
      [MODULE 2] STRUCTURE HTML
@@ -1493,13 +2107,55 @@ async function load() {
     .catch(() => { renderWeeklySummary(null); });
 }
 
+let OFFLINE_SINCE = null;
+let CONSEC_FAIL = 0;
 function setStatus(ok, pause) {
   const p = document.getElementById('pill-status');
   const q = document.getElementById('pill-pause');
   p.className = ok ? 'pill live' : 'pill dead';
-  p.innerHTML = ok ? '<span class="dot-live"></span>Alpaca live' : '✕ Offline';
+  p.innerHTML = ok ? '<span class="dot-live"></span>Alpaca live' : '✕ Hors-ligne';
   q.style.display = pause ? 'inline-flex' : 'none';
+
+  const modal = document.getElementById('offline-modal');
+  const banner = document.getElementById('offline-banner');
+  if (!ok) {
+    CONSEC_FAIL++;
+    if (!OFFLINE_SINCE) OFFLINE_SINCE = Date.now();
+    if (banner) banner.style.display = 'flex';
+    // Popup après 2 échecs consécutifs OU si aucune donnée jamais reçue
+    if (modal && (CONSEC_FAIL >= 2 || !LAST_DATA)) {
+      modal.classList.add('show');
+      const since = document.getElementById('offline-since');
+      if (since && OFFLINE_SINCE) {
+        const s = Math.floor((Date.now() - OFFLINE_SINCE)/1000);
+        since.textContent = s < 60 ? `${s}s` : `${Math.floor(s/60)}min ${s%60}s`;
+      }
+    }
+  } else {
+    CONSEC_FAIL = 0;
+    OFFLINE_SINCE = null;
+    if (modal) modal.classList.remove('show');
+    if (banner) banner.style.display = 'none';
+  }
 }
+// Met à jour le compteur de la modale toutes les secondes
+setInterval(() => {
+  if (OFFLINE_SINCE) {
+    const since = document.getElementById('offline-since');
+    if (since) {
+      const s = Math.floor((Date.now() - OFFLINE_SINCE)/1000);
+      since.textContent = s < 60 ? `${s}s` : `${Math.floor(s/60)}min ${s%60}s`;
+    }
+  }
+}, 1000);
+
+// Bouton "Réessayer" et fermeture de la modale
+document.addEventListener('click', e => {
+  if (e.target.matches('[data-retry]')) { e.preventDefault(); load(); }
+  if (e.target.matches('[data-close-modal]')) {
+    document.getElementById('offline-modal')?.classList.remove('show');
+  }
+});
 
 load(); setInterval(load, REFRESH_MS);
 
