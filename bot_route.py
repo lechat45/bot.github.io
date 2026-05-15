@@ -118,8 +118,12 @@ ALLOCATION_BASE       = 1_000.0   # Allocation standard par trade (score 65-74)
 ALLOCATION_FORTE      = 1_200.0   # Conviction FORTE  score 75-89 → +20%
 ALLOCATION_FAIBLE     = 700.0     # Conviction FAIBLE score 55-64 → −30%
 MAX_POSITIONS         = 9999  # Illimité — seul le cash disponible limite les positions
-STOP_LOSS_PCT         = 0.03      # Stop-loss fixe de secours 3%
-TAKE_PROFIT_PCT       = 0.045     # Take-profit fixe 4.5%
+STOP_LOSS_PCT         = 0.03      # Stop-loss % (fallback si montant fixe non applicable)
+TAKE_PROFIT_PCT       = 0.045     # Take-profit % (fallback)
+# ── Seuils monétaires fixes (prioritaires sur les % ci-dessus) ───────────
+STOP_LOSS_FIXE        = 25.0      # Vente sécurité : perte ≥ 25 $ sur la position
+TAKE_PROFIT_ACTIONS   = 50.0      # Prise de profit actions : gain ≥ 50 $
+TAKE_PROFIT_CRYPTO    = 100.0     # Prise de profit crypto  : gain ≥ 100 $
 ATR_STOP_MULTIPLIER   = 1.8       # Stop dynamique = 1.8× ATR
 ATR_TP_MULTIPLIER     = 2.7       # TP   dynamique = 2.7× ATR → ratio 1.5×
 TRAILING_STOP_PCT     = 0.025     # Trailing : −2.5% depuis le plus haut
@@ -2756,35 +2760,75 @@ class GestionnaireRisque:
             return False
 
     def verifier_stop_loss(self, pos: dict) -> bool:
+        """
+        Déclenche la vente si la perte atteint le seuil fixe de 25 $.
+        Fallback % si la valeur de marché est trop faible pour évaluer en $.
+        """
         ticker = pos.get("ticker", "")
-        plpc   = pos.get("unrealized_plpc", 0)
-        # Normaliser le ticker pour la comparaison (DOGEUSD ↔ DOGE/USD)
+        pl     = pos.get("unrealized_pl", 0)    # P&L absolu en $
+        plpc   = pos.get("unrealized_plpc", 0)  # P&L en %
+
+        # ── Seuil monétaire fixe (prioritaire) ────────────────────────────
+        if pl <= -STOP_LOSS_FIXE:
+            self.logger.warning(
+                f"🛑 STOP-LOSS {ticker}: -{abs(pl):.2f}$ "
+                f"(seuil fixe -{STOP_LOSS_FIXE:.0f}$) | {plpc:.2f}%"
+            )
+            return True
+
+        # ── Fallback % pour meme stocks ou petites positions ──────────────
         ticker_norm = ticker.replace("/", "")
         is_meme = ticker in MEME_STOCKS or ticker_norm in MEME_STOCKS
-        # Stop-loss plus serré pour les meme stocks (4% vs 3% standard)
-        sl_pct = STOP_LOSS_MEME if is_meme else STOP_LOSS_PCT
+        sl_pct  = STOP_LOSS_MEME if is_meme else STOP_LOSS_PCT
         if plpc <= -(sl_pct * 100):
             self.logger.warning(
                 f"🛑 STOP-LOSS {ticker}: {plpc:.2f}% "
                 f"(seuil {'MEME' if is_meme else 'STD'} -{sl_pct*100:.0f}%)"
             )
             return True
-        # Feature D : Vérification breakeven
+
+        # ── Feature D : Vérification breakeven ───────────────────────────
         if ticker in self.breakeven_levels:
-            entry      = float(pos.get("avg_entry_price", 0))
-            be_level   = self.breakeven_levels[ticker]
+            entry       = float(pos.get("avg_entry_price", 0))
+            be_level    = self.breakeven_levels[ticker]
             prix_actuel = float(pos.get("current_price", entry))
-            # Si prix actuel revient au niveau breakeven et on était en gain → vendre
             if prix_actuel < be_level * 1.001 and prix_actuel > entry * 0.995:
                 self.logger.info(f"[BREAKEVEN STOP] {ticker} — prix revenu au niveau d'entrée ${be_level:.2f}")
                 return True
         return False
 
     def verifier_take_profit(self, pos: dict) -> bool:
-        plpc = pos.get("unrealized_plpc", 0)
-        if plpc >= (TAKE_PROFIT_PCT * 100):
-            self.logger.info(f"✅ TAKE-PROFIT {pos['ticker']}: {plpc:.2f}%")
+        """
+        Prise de profit sur seuil monétaire fixe :
+          • Actions  : gain ≥ 50 $
+          • Crypto   : gain ≥ 100 $
+        Fallback % si montant insuffisant.
+        """
+        ticker = pos.get("ticker", "")
+        pl     = pos.get("unrealized_pl", 0)    # P&L absolu en $
+        plpc   = pos.get("unrealized_plpc", 0)  # P&L en %
+
+        # Détection crypto (slash, liste connue, ou suffixe USD court)
+        est_crypto = (
+            "/" in ticker
+            or ticker in {t.replace("/", "") for t in ACTIFS_CRYPTO}
+            or (ticker.endswith("USD") and len(ticker) <= 8)
+        )
+        seuil_tp = TAKE_PROFIT_CRYPTO if est_crypto else TAKE_PROFIT_ACTIONS
+
+        # ── Seuil monétaire fixe (prioritaire) ────────────────────────────
+        if pl >= seuil_tp:
+            self.logger.info(
+                f"✅ TAKE-PROFIT {ticker}: +{pl:.2f}$ "
+                f"(seuil {'CRYPTO' if est_crypto else 'ACTION'} +{seuil_tp:.0f}$) | {plpc:.2f}%"
+            )
             return True
+
+        # ── Fallback % si position trop petite pour atteindre le seuil $ ─
+        if plpc >= (TAKE_PROFIT_PCT * 100):
+            self.logger.info(f"✅ TAKE-PROFIT % {ticker}: {plpc:.2f}%")
+            return True
+
         return False
 
     def verifier_trailing_stop(self, pos: dict) -> bool:
@@ -5484,19 +5528,22 @@ Sois direct, pratique, sans jargon technique."""
             "kelly_historique_usd": self._kelly_base,
             "breakeven_actifs": list(self.risque.breakeven_actifs),
             "config": {
-                "stop_loss_pct":      STOP_LOSS_PCT * 100,
-                "take_profit_pct":    TAKE_PROFIT_PCT * 100,
-                "trailing_stop_pct":  TRAILING_STOP_PCT * 100,
-                "max_positions":      MAX_POSITIONS,
-                "allocation_base":    ALLOCATION_BASE,
-                "seuil_sentiment":    SEUIL_SENTIMENT_BUY,
-                "nb_actifs":          len(ACTIFS_TOUS),
-                "nb_candidats_sp500": len(SP500_CANDIDATS),
-                "indicateurs":        list(POIDS.keys()),
-                "sentiment_modele":   AnalyseurSentimentGroq.MODELE,
-                "lt_actif":           LT_ACTIF,
-                "lt_alloc_pct":       LT_ALLOC_PCT,
-                "lt_max_positions":   LT_MAX_POSITIONS,
+                "stop_loss_fixe_usd":       STOP_LOSS_FIXE,
+                "take_profit_actions_usd":  TAKE_PROFIT_ACTIONS,
+                "take_profit_crypto_usd":   TAKE_PROFIT_CRYPTO,
+                "stop_loss_pct":            STOP_LOSS_PCT * 100,
+                "take_profit_pct":          TAKE_PROFIT_PCT * 100,
+                "trailing_stop_pct":        TRAILING_STOP_PCT * 100,
+                "max_positions":            MAX_POSITIONS,
+                "allocation_base":          ALLOCATION_BASE,
+                "seuil_sentiment":          SEUIL_SENTIMENT_BUY,
+                "nb_actifs":                len(ACTIFS_TOUS),
+                "nb_candidats_sp500":       len(SP500_CANDIDATS),
+                "indicateurs":              list(POIDS.keys()),
+                "sentiment_modele":         AnalyseurSentimentGroq.MODELE,
+                "lt_actif":                 LT_ACTIF,
+                "lt_alloc_pct":             LT_ALLOC_PCT,
+                "lt_max_positions":         LT_MAX_POSITIONS,
             },
         }
 
@@ -5518,7 +5565,7 @@ def main():
     logger.info(f"   Actifs    : {len(ACTIFS_TOUS)} ({len(ACTIFS_ACTIONS)} actions + {len(ACTIFS_CRYPTO)} crypto)")
     logger.info(f"   Indicateurs : HMA({HMA_PERIODE}) EMA({EMA_TENDANCE}) MACD RSI BB ADX Volume")
     logger.info(f"   Sentiment : Groq Cloud ({AnalyseurSentimentGroq.MODELE})")
-    logger.info(f"   Stops : SL {STOP_LOSS_PCT*100:.0f}% / TP {TAKE_PROFIT_PCT*100:.0f}% / Trail {TRAILING_STOP_PCT*100:.0f}%")
+    logger.info(f"   Stops : SL -{STOP_LOSS_FIXE:.0f}$ | TP Actions +{TAKE_PROFIT_ACTIONS:.0f}$ | TP Crypto +{TAKE_PROFIT_CRYPTO:.0f}$ | Trail {TRAILING_STOP_PCT*100:.0f}%")
 
     if not ALPACA_API_KEY:
         logger.error("ALPACA_API_KEY manquant — arrêt")
